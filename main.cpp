@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <cstring>
 extern "C" {
-  #include "lib/unp.h"
+  #include "unp.h"
 }
 
 void childHandler(int sigNum) {
@@ -28,6 +28,8 @@ void childHandler(int sigNum) {
 #define ERR_ILLEGAL_TFTP_OP 4
 #define ERR_UNKNOWN_TID 5
 #define ERR_FILE_ALREADY_EXISTS 6
+
+#define UINT16_MAX_ 65535
 
 #ifdef DEBUG_
 const bool vDEBUG = true;
@@ -66,28 +68,36 @@ int main(int argc, char **argv)
 	act.sa_flags = 0;
 	sigaction(SIGCHLD, &act, NULL);
 
-  unsigned short int startPort = atoi(argv[1]);
-	unsigned short int maxPort = atoi(argv[2]);
+  unsigned short startPort = (short) atoi(argv[1]);
+	unsigned short maxPort = (short) atoi(argv[2]);
 
+	unsigned short int TID = startPort;
 	struct sockaddr_in servaddr, cliaddr;
 	bzero(&servaddr, sizeof(servaddr));
 	bzero(&cliaddr, sizeof(cliaddr));
 	servaddr.sin_family = AF_INET;
 	servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-	servaddr.sin_port = htons(startPort);
+	servaddr.sin_port = htons(TID);
 
 	int listeningSocket = Socket(AF_INET, SOCK_DGRAM, 0);
-	Bind(listeningSocket, (sockaddr *)&servaddr, sizeof(servaddr));
+	int res;
+	while ((res = bind(listeningSocket, (sockaddr *)&servaddr, sizeof(servaddr)) ) < 0 ) {
+		++TID;
+		servaddr.sin_port = htons(TID);
+	}
+	++TID;
 
 	char buffer[MSS];
 	memset(buffer, 0, MSS);
 
 	int n;
-	unsigned short int numConnections = 0;
 
 	socklen_t len = sizeof(cliaddr);
-	while ((n = recvfrom(listeningSocket, buffer, MSS, 0, (sockaddr *)&cliaddr, &len)) > 0)
+	while (true)
 	{
+
+		n = recvfrom(listeningSocket, buffer, MSS, 0, (sockaddr *)&cliaddr, &len);
+		if (n < 0) continue;
 		
 		if (vDEBUG) {
 			printf ("Data size: %d\n", n);
@@ -100,10 +110,10 @@ int main(int argc, char **argv)
 		/*
 			If we do not exceed the maximum allowed connections...
 		*/
-		if (numConnections >= (maxPort - startPort))
+		if (TID >= maxPort)
 		{
 			// Send error packet
-			sendError(listeningSocket, cliaddr, ERR_NOT_DEF, "No TID Available");
+			// sendError(listeningSocket, cliaddr, ERR_NOT_DEF, "No TID Available");
 			break; // Break and terminate server
 		}
 		// Got a connection, do the initialization
@@ -144,8 +154,6 @@ int main(int argc, char **argv)
 			continue;
 		}
 
-		unsigned short int TID = startPort + (++numConnections);
-
 		// Fork and let the child handle the rest of that TID's tftp
 		pid_t pid = Fork();
 		if (pid == 0)
@@ -160,6 +168,9 @@ int main(int argc, char **argv)
 			}
 		}
 		//Parent
+		else {
+			++ TID;
+		}
 	}
 
 	// Close all connections and terminate the server
@@ -335,7 +346,7 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 	// Open file
 	FILE * writeFile = fopen(inputBuffer, "w");
 
-	int numTimeouts, i, n;
+	int i, n;
 	bool EOF_ = false;
 	uint16_t op_code;
 
@@ -352,7 +363,6 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 		// wait for next block of data
 		adrsize = sizeof(childServerAddr);
 		memset(recvBuffer, 0, 516);
-		numTimeouts = 0;
 		for (i = 0; i < 10; ++i) {
 			n = -2;
 			alarm (1);
@@ -382,21 +392,52 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 				(2) TID is correct
 			*/
 			op_code = (recvBuffer[0] << 8) | recvBuffer[1];
-			int data_block_num = (recvBuffer[2] << 8) | recvBuffer[3];
-			if (vDEBUG) printf ("OP code: %s\n", op_code == OP_DATA ? "IS_DATA": "NOT_DATA");
+			uint16_t data_block_num = ((unsigned char) recvBuffer[3]) | (( (unsigned char) recvBuffer[2]) << 8);
+
+			if (vDEBUG) fprintf (stderr, "%u => %u\n", data_block_num, UINT16_MAX_);
+
+			if (vDEBUG) {
+				printf ("OP code: %s\n", op_code == OP_DATA ? "IS_DATA": "NOT_DATA");
+				fflush(0);
+			}
 
 			// incorrect tld ...
 			if (clientTid != ntohs(clientaddr.sin_port)) { // Incorrect TID
-				if (vDEBUG) fprintf (stderr, "TIDs do not match... Sending error.\n");
+				if (vDEBUG) {
+					fprintf (stderr, "TIDs do not match... Sending error.\n");
+					fflush(0);
+				}
 				sendError(mainSocket, childServerAddr, ERR_UNKNOWN_TID, "Unknown Tranfer ID");
 				continue;
 			}
 			else if (op_code != OP_DATA) {
 				// ... ignore for now
+				if (vDEBUG) {
+					fprintf (stderr, "OP code is not DATA\n");
+					fflush(0);
+				}
+				continue;
 			}
-			// TODO make sure TID is correct
+
+			// max block value acquired...
+			else if (data_block_num == UINT16_MAX_) {
+				if (vDEBUG) fprintf (stderr, "Maximum block value recieved. Cannot read any more.\n");
+
+				// send final ACK
+				write16(sendBuffer, (uint16_t) OP_ACK);
+				write16(sendBuffer+2, (uint16_t) blocknum);
+				Sendto(mainSocket, sendBuffer, 4, 0, (struct sockaddr*)&clientaddr, adrsize);
+
+				fclose(writeFile);
+				Close(mainSocket);
+				return;
+			}
+
 			else if (data_block_num == blocknum)  {
-				if (vDEBUG) printf ("Recieved correct block [%d]\n", blocknum);
+				if (vDEBUG) {
+					printf ("Recieved correct block [%d]\n", blocknum);
+					fflush(0);
+				}
 			
 				// write the data to our file.
 				if (n < 516) recvBuffer[n] = 0;
@@ -413,105 +454,15 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 					if (vDEBUG) printf("Finished sending file!\n");
 					fclose(writeFile);
 					Close(mainSocket);
-					exit(1);
+					return;
 				}
 			}
 			else {
 				// ... not the block we expect ...
-			}
-		}
-	}
-
-	while (false) {
-		// Craft ACK
-		memset(sendBuffer, 0, sizeof(sendBuffer));
-		write16(sendBuffer, uint16_t(OP_ACK));
-		write16(sendBuffer+2, uint16_t(nextBlocknum - 1));
-	
-	  // Send ACK
-		while (numTimeouts < 10) {
-			Sendto(mainSocket, sendBuffer, 4, 0, (struct sockaddr*)&childServerAddr, adrsize);
-			alarm(1);
-			n = -2;
-
-			n = Recvfrom(mainSocket, recvBuffer, 516, 0, (struct sockaddr*)&childServerAddr, &adrsize);
-			if (n >= 0) { // we got data
 				if (vDEBUG) {
-					printf("Recieved %d bytes\n", n);
+					fprintf (stderr, "Unmet case...\n");
 				}
-				break;
-			}
-			else if (n == -1) {
-				if (vDEBUG) fprintf (stderr, "Error occurred in Recvfrom.\n");
-			}
-			else if (n == -2) {
-				if (vDEBUG) fprintf(stderr, "RecvFrom timed out (%d/10)\n", numTimeouts);
-			}
-			++numTimeouts;
-		}
-
-		if (vDEBUG) printf ("Client responed with %d timeouts\n", numTimeouts);
-
-		/*
-		If we timeout (10 seconds), terminate!
-		*/
-		if (numTimeouts == 10) {
-			// Terminate
-			sendError(mainSocket, childServerAddr, ERR_NOT_DEF, "Premature termination");
-			fclose(writeFile);
-			Close(mainSocket);
-			exit(1);
-		} 
-		
-		/*
-		If we do not timeout, and the block # is the expected
-		block, send an acknowledgement
-		*/
-		else {
-			// Check the TID
-			if (clientTid != ntohs(childServerAddr.sin_port)) { // Incorrect TID
-				if (vDEBUG) fprintf (stderr, "TIDs do not match... Sending error.\n");
-				sendError(mainSocket, childServerAddr, ERR_UNKNOWN_TID, "Unknown Tranfer ID");
 				continue;
-			}
-
-			op_code = (recvBuffer[0] << 8) | recvBuffer[1];
-			if (vDEBUG) {
-				printf ("Response OP CODE => %d\n", op_code);
-			}
-
-			if (op_code != OP_DATA)
-			{
-				//If packet is not DATA send an error and terminate
-				sendError(mainSocket, childServerAddr, ERR_ILLEGAL_TFTP_OP, "Illegal TFTP OP: DATA expected");
-				fclose(writeFile);
-				Close(mainSocket);
-				exit(1);
-			} 
-			
-			/*
-			If we get the expected op code, continue
-			*/
-			else {
-				//If packet is DATA, check to see if it has the expected blocknum
-				blocknum = (recvBuffer[2] << 8) | recvBuffer[3];
-				if (nextBlocknum == blocknum)
-				{
-					//If it is the expected blocknum write to file
-					fputs(recvBuffer+4, writeFile);
-				
-				  if (n == 516) {
-						//If data is 512 bytes, increment the nextBlockNumber?
-						nextBlocknum++;
-					} else {
-						//If data is <512 bytes, end the loop
-						EOF_ = true;
-					}
-				}
-				else
-				{
-					//If it is not the expected blocknum ignore	
-				}
 			}
 		}
 	}
