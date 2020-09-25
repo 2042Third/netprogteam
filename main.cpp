@@ -323,14 +323,14 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 	// const unsigned short int serverTid = tid;
 
   // Craft Socket	
-	struct sockaddr_in tempAddr;
-	bzero(&tempAddr, sizeof(tempAddr));
-	tempAddr.sin_family = AF_INET;
-	tempAddr.sin_addr.s_addr = clientaddr.sin_addr.s_addr; // If this doesn't work, use INADDR_ANY
-	tempAddr.sin_port = htons(tid);
+	struct sockaddr_in childServerAddr;
+	bzero(&childServerAddr, sizeof(childServerAddr));
+	childServerAddr.sin_family = AF_INET;
+	childServerAddr.sin_addr.s_addr = clientaddr.sin_addr.s_addr; // If this doesn't work, use INADDR_ANY
+	childServerAddr.sin_port = htons(tid);
 
 	int mainSocket = Socket(AF_INET, SOCK_DGRAM, 0);
-	Bind(mainSocket, (struct sockaddr *)&tempAddr, sizeof(tempAddr));
+	Bind(mainSocket, (struct sockaddr *)&childServerAddr, sizeof(childServerAddr));
 
 	// Open file
 	FILE * writeFile = fopen(inputBuffer, "w");
@@ -340,7 +340,7 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 	uint16_t op_code;
 
 	// send initial ACK
-	socklen_t adrsize = sizeof(tempAddr);
+	socklen_t adrsize = sizeof(childServerAddr);
 	{
 		write16(sendBuffer, (uint16_t) OP_ACK);
 		write16(sendBuffer+2, (uint16_t) 0);
@@ -350,7 +350,7 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 	while (!EOF_) {
 
 		// wait for next block of data
-		adrsize = sizeof(tempAddr);
+		adrsize = sizeof(childServerAddr);
 		memset(recvBuffer, 0, 516);
 		numTimeouts = 0;
 		for (i = 0; i < 10; ++i) {
@@ -363,8 +363,8 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 		// If we timeout ...
 		if (n == -2 || n == -1) {
 			fprintf (stderr, "Client timed out... (TODO)\n");
-			if (n == -2) sendError(mainSocket, tempAddr, ERR_NOT_DEF, "Premature termination");
-			if (n == -1) sendError(mainSocket, tempAddr, ERR_NOT_DEF, "Premature termination");
+			if (n == -2) sendError(mainSocket, childServerAddr, ERR_NOT_DEF, "Premature termination");
+			if (n == -1) sendError(mainSocket, childServerAddr, ERR_NOT_DEF, "Premature termination");
 			fclose(writeFile);
 			Close(mainSocket);
 			exit(1);
@@ -385,7 +385,13 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 			int data_block_num = (recvBuffer[2] << 8) | recvBuffer[3];
 			if (vDEBUG) printf ("OP code: %s\n", op_code == OP_DATA ? "IS_DATA": "NOT_DATA");
 
-			if (op_code != OP_DATA) {
+			// incorrect tld ...
+			if (clientTid != ntohs(clientaddr.sin_port)) { // Incorrect TID
+				if (vDEBUG) fprintf (stderr, "TIDs do not match... Sending error.\n");
+				sendError(mainSocket, childServerAddr, ERR_UNKNOWN_TID, "Unknown Tranfer ID");
+				continue;
+			}
+			else if (op_code != OP_DATA) {
 				// ... ignore for now
 			}
 			// TODO make sure TID is correct
@@ -424,11 +430,11 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 	
 	  // Send ACK
 		while (numTimeouts < 10) {
-			Sendto(mainSocket, sendBuffer, 4, 0, (struct sockaddr*)&tempAddr, adrsize);
+			Sendto(mainSocket, sendBuffer, 4, 0, (struct sockaddr*)&childServerAddr, adrsize);
 			alarm(1);
 			n = -2;
 
-			n = Recvfrom(mainSocket, recvBuffer, 516, 0, (struct sockaddr*)&tempAddr, &adrsize);
+			n = Recvfrom(mainSocket, recvBuffer, 516, 0, (struct sockaddr*)&childServerAddr, &adrsize);
 			if (n >= 0) { // we got data
 				if (vDEBUG) {
 					printf("Recieved %d bytes\n", n);
@@ -451,7 +457,7 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 		*/
 		if (numTimeouts == 10) {
 			// Terminate
-			sendError(mainSocket, tempAddr, ERR_NOT_DEF, "Premature termination");
+			sendError(mainSocket, childServerAddr, ERR_NOT_DEF, "Premature termination");
 			fclose(writeFile);
 			Close(mainSocket);
 			exit(1);
@@ -463,9 +469,9 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 		*/
 		else {
 			// Check the TID
-			if (clientTid != ntohs(tempAddr.sin_port)) { // Incorrect TID
+			if (clientTid != ntohs(childServerAddr.sin_port)) { // Incorrect TID
 				if (vDEBUG) fprintf (stderr, "TIDs do not match... Sending error.\n");
-				sendError(mainSocket, tempAddr, ERR_UNKNOWN_TID, "Unknown Tranfer ID");
+				sendError(mainSocket, childServerAddr, ERR_UNKNOWN_TID, "Unknown Tranfer ID");
 				continue;
 			}
 
@@ -477,7 +483,7 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 			if (op_code != OP_DATA)
 			{
 				//If packet is not DATA send an error and terminate
-				sendError(mainSocket, tempAddr, ERR_ILLEGAL_TFTP_OP, "Illegal TFTP OP: DATA expected");
+				sendError(mainSocket, childServerAddr, ERR_ILLEGAL_TFTP_OP, "Illegal TFTP OP: DATA expected");
 				fclose(writeFile);
 				Close(mainSocket);
 				exit(1);
@@ -514,8 +520,8 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 	memset(sendBuffer, 0, sizeof(sendBuffer));
 	write16(sendBuffer, uint16_t(OP_ACK));
 	write16(sendBuffer+2, uint16_t(blocknum));
-	socklen_t socklen = sizeof(tempAddr);
-	Sendto(mainSocket, sendBuffer, 4, 0, (struct sockaddr*)&tempAddr, socklen);
+	socklen_t socklen = sizeof(childServerAddr);
+	Sendto(mainSocket, sendBuffer, 4, 0, (struct sockaddr*)&childServerAddr, socklen);
 	
 	fclose(writeFile);
 	Close(mainSocket);
