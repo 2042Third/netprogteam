@@ -120,7 +120,7 @@ int main(int argc, char **argv)
 		if (op_code != OP_READ && op_code != OP_WRITE) {
 			// send ERR
 			sendError (listeningSocket, cliaddr, ERR_ILLEGAL_TFTP_OP, "Illegal TFTP OP");
-		} 
+		}
 		
 		/*
 			If we get a Read request:
@@ -128,6 +128,7 @@ int main(int argc, char **argv)
 				(2) else, if it does exist, fork parent and initiate read request handler
 		*/
 		else if (op_code == OP_READ && !fileExists(buffer + 2)) {
+			if (vDEBUG) fprintf (stderr, "File could not be found.\n");
 			sendError(listeningSocket, cliaddr, ERR_FILE_NOT_FOUND, "File Not Found");
 			continue;
 		} 
@@ -138,6 +139,7 @@ int main(int argc, char **argv)
 				(2) else, fork parent and initate write request
 		*/
 		else if (op_code == OP_WRITE && fileExists(buffer + 2)) {
+			if (vDEBUG) fprintf (stderr, "File already exists.\n");
 			sendError(listeningSocket, cliaddr, ERR_FILE_ALREADY_EXISTS, "File Already Exists");
 			continue;
 		}
@@ -239,7 +241,6 @@ void RRQ_handle(int len, char * buffer, struct sockaddr_in &clientaddr, unsigned
 		
 		// set the block number.
 		write16(sendBuffer+2, blocknum);
-		
 		// write the next 512 bytes into the buffer
 		// myfile.seekg(track);
 		myfile.read(sendBuffer+4, 512);
@@ -310,7 +311,7 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
   //  ---------------------------------------
   // |  Filename  |   0  |    Mode    |   0  |
   //  ---------------------------------------
-	uint16_t blocknum = 0;
+	uint16_t blocknum = 1;
 	uint16_t nextBlocknum = 1;
 
 	if (vDEBUG) printf ("Writing on port %u\n", tid);
@@ -334,41 +335,144 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 	// Open file
 	FILE * writeFile = fopen(inputBuffer, "w");
 
-	int numTimeouts = 0;
-	ssize_t n;
+	int numTimeouts, i, n;
 	bool EOF_ = false;
-	short op_code;
+	uint16_t op_code;
+
+	// send initial ACK
+	socklen_t adrsize = sizeof(tempAddr);
+	{
+		write16(sendBuffer, (uint16_t) OP_ACK);
+		write16(sendBuffer+2, (uint16_t) 0);
+		Sendto(mainSocket, sendBuffer, 4, 0, (struct sockaddr*)&clientaddr, adrsize);
+	}
+
 	while (!EOF_) {
+
+		// wait for next block of data
+		adrsize = sizeof(tempAddr);
+		memset(recvBuffer, 0, 516);
+		numTimeouts = 0;
+		for (i = 0; i < 10; ++i) {
+			n = -2;
+			alarm (1);
+			n = Recvfrom(mainSocket, recvBuffer, 516, 0, (struct sockaddr*)&clientaddr, &adrsize);
+			if (n >= 0) break;
+		}
+
+		// If we timeout ...
+		if (n == -2 || n == -1) {
+			fprintf (stderr, "Client timed out... (TODO)\n");
+			if (n == -2) sendError(mainSocket, tempAddr, ERR_NOT_DEF, "Premature termination");
+			if (n == -1) sendError(mainSocket, tempAddr, ERR_NOT_DEF, "Premature termination");
+			fclose(writeFile);
+			Close(mainSocket);
+			exit(1);
+		}
+
+		/*
+		We recieved data from the client.
+		*/
+		else {
+			if (vDEBUG) printf ("Client sent %d bytes after %d timeouts\n", n, i);
+
+			/*
+			verify that the data is correct:
+				(1) block is correct
+				(2) TID is correct
+			*/
+			op_code = (recvBuffer[0] << 8) | recvBuffer[1];
+			int data_block_num = (recvBuffer[2] << 8) | recvBuffer[3];
+			if (vDEBUG) printf ("OP code: %s\n", op_code == OP_DATA ? "IS_DATA": "NOT_DATA");
+
+			if (op_code != OP_DATA) {
+				// ... ignore for now
+			}
+			// TODO make sure TID is correct
+			else if (data_block_num == blocknum)  {
+				if (vDEBUG) printf ("Recieved correct block [%d]\n", blocknum);
+			
+				// write the data to our file.
+				if (n < 516) recvBuffer[n] = 0;
+				fputs(recvBuffer+4, writeFile);
+
+				// send the ACK
+				write16(sendBuffer, (uint16_t) OP_ACK);
+				write16(sendBuffer+2, (uint16_t) blocknum);
+				Sendto(mainSocket, sendBuffer, 4, 0, (struct sockaddr*)&clientaddr, adrsize);
+				++blocknum;
+
+				// if this is the last packet
+				if (n < 516) {
+					if (vDEBUG) printf("Finished sending file!\n");
+					fclose(writeFile);
+					Close(mainSocket);
+					exit(1);
+				}
+			}
+			else {
+				// ... not the block we expect ...
+			}
+		}
+	}
+
+	while (false) {
 		// Craft ACK
 		memset(sendBuffer, 0, sizeof(sendBuffer));
 		write16(sendBuffer, uint16_t(OP_ACK));
 		write16(sendBuffer+2, uint16_t(nextBlocknum - 1));
 	
 	  // Send ACK
-		socklen_t adrsize = sizeof(tempAddr);
-		numTimeouts = 0;
 		while (numTimeouts < 10) {
 			Sendto(mainSocket, sendBuffer, 4, 0, (struct sockaddr*)&tempAddr, adrsize);
 			alarm(1);
+			n = -2;
+
 			n = Recvfrom(mainSocket, recvBuffer, 516, 0, (struct sockaddr*)&tempAddr, &adrsize);
 			if (n >= 0) { // we got data
+				if (vDEBUG) {
+					printf("Recieved %d bytes\n", n);
+				}
 				break;
 			}
+			else if (n == -1) {
+				if (vDEBUG) fprintf (stderr, "Error occurred in Recvfrom.\n");
+			}
+			else if (n == -2) {
+				if (vDEBUG) fprintf(stderr, "RecvFrom timed out (%d/10)\n", numTimeouts);
+			}
+			++numTimeouts;
 		}
+
+		if (vDEBUG) printf ("Client responed with %d timeouts\n", numTimeouts);
+
+		/*
+		If we timeout (10 seconds), terminate!
+		*/
 		if (numTimeouts == 10) {
 			// Terminate
 			sendError(mainSocket, tempAddr, ERR_NOT_DEF, "Premature termination");
 			fclose(writeFile);
 			Close(mainSocket);
 			exit(1);
-		} else {
+		} 
+		
+		/*
+		If we do not timeout, and the block # is the expected
+		block, send an acknowledgement
+		*/
+		else {
 			// Check the TID
 			if (clientTid != ntohs(tempAddr.sin_port)) { // Incorrect TID
+				if (vDEBUG) fprintf (stderr, "TIDs do not match... Sending error.\n");
 				sendError(mainSocket, tempAddr, ERR_UNKNOWN_TID, "Unknown Tranfer ID");
 				continue;
 			}
 
-			op_code = ntohs((recvBuffer[0] << 8) | recvBuffer[1]);
+			op_code = (recvBuffer[0] << 8) | recvBuffer[1];
+			if (vDEBUG) {
+				printf ("Response OP CODE => %d\n", op_code);
+			}
 
 			if (op_code != OP_DATA)
 			{
@@ -377,7 +481,12 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 				fclose(writeFile);
 				Close(mainSocket);
 				exit(1);
-			} else {
+			} 
+			
+			/*
+			If we get the expected op code, continue
+			*/
+			else {
 				//If packet is DATA, check to see if it has the expected blocknum
 				blocknum = (recvBuffer[2] << 8) | recvBuffer[3];
 				if (nextBlocknum == blocknum)
