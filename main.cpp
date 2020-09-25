@@ -238,13 +238,12 @@ bool fileExists (char* fileName) {
 
 
 void readHeader (char* recvBuffer, uint16_t *op_code, uint16_t *recv_block_num) {
-	*op_code = ntohs((recvBuffer[0] << 8) | recvBuffer[1]);
-	*recv_block_num = ntohs((recvBuffer[2] << 8) | recvBuffer[3]);
+	*op_code = ((unsigned char) (recvBuffer[0] << 8)) | ((unsigned char) recvBuffer[1]);
+	*recv_block_num = (((unsigned char) recvBuffer[2]) << 8) | ((unsigned char) recvBuffer[3]);
 }
 
 void RRQ_handle(int len, char * buffer, struct sockaddr_in &clientaddr, unsigned short tid){
 	uint16_t blocknum = 1;
-	unsigned int track = 0;
 	ssize_t recv_size;
 	std::ifstream myfile;
 	
@@ -268,33 +267,39 @@ void RRQ_handle(int len, char * buffer, struct sockaddr_in &clientaddr, unsigned
 	// set DATA as the op code of the buffer
 	write16(sendBuffer, OP_DATA);
 
-	myfile.open(buffer);
+	FILE * readFile = fopen(buffer, "r");
+	if (readFile == NULL) {
+		if (vDEBUG) fprintf (stderr, "Error opening file...\n");
+		return;
+	}
+
 	socklen_t socklen;
-	while(!myfile.eof()) {
+	size_t datalen;
+	while (true) {
 		
 		// set the block number.
 		write16(sendBuffer+2, blocknum);
-		// write the next 512 bytes into the buffer
-		// myfile.seekg(track);
-		myfile.read(sendBuffer+4, 512);
-		
+		memset(sendBuffer+4, 0, 512);
+		datalen = fread(sendBuffer+4, sizeof(char), 512, readFile);
+		if (vDEBUG) printf("Read %ld bytes from file.\n", datalen);
+
 		//try to send the buffer
 		socklen = sizeof(clientaddr);
-		Sendto(clientaddr.sin_port, sendBuffer, len, 0, (struct sockaddr*) &clientaddr, socklen);
+		Sendto(mainSocket, sendBuffer, datalen+4, 0, (struct sockaddr*) &clientaddr, socklen);
 
 		// wait for the response
 		for (int i = 0; i < 10; ++i) {
 			
 			recv_size = -2;
-			alarm(1);
-
+			
       socklen = sizeof(tempAddr);
+			alarm(1);
 			recv_size = Recvfrom(mainSocket, recvBuffer, sizeof(recvBuffer), 0, (
-				struct sockaddr*)&tempAddr, &socklen);
+				struct sockaddr*)&clientaddr, &socklen);
 			
 			if (recv_size == -2){//resend when timeout for 1s
 				socklen = sizeof(clientaddr);
-				Sendto(clientaddr.sin_port, sendBuffer, len, 0, (struct sockaddr*) &clientaddr, socklen);
+				Sendto(mainSocket, sendBuffer, len, 0, (struct sockaddr*) &clientaddr, socklen);
 			}
 
 			if (recv_size >= 0) break;
@@ -328,12 +333,11 @@ void RRQ_handle(int len, char * buffer, struct sockaddr_in &clientaddr, unsigned
 		}
 		
 		//wait for client to ACK
-		track += 512;
-		blocknum ++;
+		++blocknum;
 	}
 
 	// cleanup
-	myfile.close();
+	fclose(readFile);
 	
 }
 
