@@ -2,7 +2,7 @@
 INC=-I../../unpv13e
 LIB=-L../../unpv13e
 
-main: main.cpp
+tftp.out: main.cpp
 	gcc main.cpp -Wall -lstdc++ -lunp -o main
 
 local: main.cpp
