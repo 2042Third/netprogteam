@@ -29,22 +29,34 @@ void childHandler(int sigNum) {
 #define ERR_UNKNOWN_TID 5
 #define ERR_FILE_ALREADY_EXISTS 6
 
+#ifdef DEBUG_
+const bool vDEBUG = true;
+#else
+const bool vDEBUG = false;
+#endif
+
 int MSS = 1024;
 
 void sendError (int socket, sockaddr_in client, int error_code, const char* errMsg);
-void write16 (char** dst, uint16_t data);
+void write16 (char* dst, uint16_t data);
 bool fileExists(char* fileName);
 void readHeader (char* recvBuffer, uint16_t *op_code, uint16_t *recv_block_num);
-void RRQ_handle(int len, char * buffer, struct sockaddr_in &clientaddr, unsigned short int tid);
-void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, unsigned short int tid);
+void RRQ_handle(int len, char * buffer, struct sockaddr_in &clientaddr, unsigned short tid);
+void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, unsigned short tid);
 
 int main(int argc, char **argv)
 {
 
-	std::cout << "???";
+	if (vDEBUG) {
+		printf ("============\n");
+		printf ("|DEBUG MODE|\n");
+		printf ("============\n");
+		fflush(0);
+	}
 	if (argc != 3)
 	{
 		fprintf (stderr, "Correct usage: %s [start of port range] [end of port range]\n", argv[0]);
+		exit(0);
 	}
 
 	// Child termination handler
@@ -74,9 +86,17 @@ int main(int argc, char **argv)
 	unsigned short int numConnections = 0;
 
 	socklen_t len = sizeof(cliaddr);
-	while ((n = Recvfrom(listeningSocket, buffer, MSS, 0, (sockaddr *)&cliaddr, &len)) > 0)
+	while ((n = recvfrom(listeningSocket, buffer, MSS, 0, (sockaddr *)&cliaddr, &len)) > 0)
 	{
 		
+		if (vDEBUG) {
+			printf ("Data size: %d\n", n);
+			printf ("Buffer: [%s]\n", buffer);
+
+			// for (int i = 0; i < n; ++i) {
+			// 	printf ("[#%d:char => %c:int => %d]\n", i, *(buffer+i), (int) *(buffer+i));
+			// }
+		}
 		/*
 			If we do not exceed the maximum allowed connections...
 		*/
@@ -87,7 +107,10 @@ int main(int argc, char **argv)
 			break; // Break and terminate server
 		}
 		// Got a connection, do the initialization
-		short op_code = ntohs((buffer[0] << 8) | buffer[1]);
+		short op_code = (buffer[0] << 8) | buffer[1];
+		if (vDEBUG) {
+			printf ("op code => %d\n", (int) op_code);
+		}
 
 
 		/*
@@ -142,10 +165,10 @@ int main(int argc, char **argv)
 	return 0;
 }
 
-void write16 (char** dst, uint16_t data) {
+void write16 (char* dst, uint16_t data) {
 	// write data into the first 2 bytes of dst
-	*(*dst) = ntohs((uint8_t) data >> 8);
-	*(*dst+1) = ntohs ((uint8_t) data);
+	*(dst) = (uint8_t) (data >> 8);
+	*(dst+1) = (uint8_t) data;
 }
 
 void sendError (int socket, sockaddr_in client, int error_code, const char* errMsg) {
@@ -157,12 +180,10 @@ void sendError (int socket, sockaddr_in client, int error_code, const char* errM
 	// create the client buffer
 	size_t len = 4 + strlen(errMsg) + 1;
 	char err_buf[len];
-	char* err_buf_ = err_buf;
 
 	memset (err_buf, 0, len);
-	write16(&err_buf_, OP_ERR);
-	err_buf_ += 2;
-	write16(&err_buf_, error_code);
+	write16(err_buf, OP_ERR);
+	write16(err_buf+2, error_code);
 	strncpy(err_buf+4, errMsg, strlen(errMsg));
 
 	// send the err_buf to the client
@@ -186,15 +207,16 @@ void readHeader (char* recvBuffer, uint16_t *op_code, uint16_t *recv_block_num) 
 	*recv_block_num = ntohs((recvBuffer[2] << 8) | recvBuffer[3]);
 }
 
-void RRQ_handle(int len, char * buffer, struct sockaddr_in &clientaddr, unsigned short int tid){
+void RRQ_handle(int len, char * buffer, struct sockaddr_in &clientaddr, unsigned short tid){
 	uint16_t blocknum = 1;
 	unsigned int track = 0;
 	ssize_t recv_size;
 	std::ifstream myfile;
+	
+	if (vDEBUG) printf ("Reading on port %u\n", tid);
 
 	char recvBuffer[516];
 	char sendBuffer[516];
-	char* sendBuf_ = sendBuffer;
 
 	const unsigned short int clientTid = ntohs(clientaddr.sin_port);
 	// const unsigned short int serverTid = tid;
@@ -203,21 +225,20 @@ void RRQ_handle(int len, char * buffer, struct sockaddr_in &clientaddr, unsigned
 	bzero(&tempAddr, sizeof(tempAddr));
 	tempAddr.sin_family = AF_INET;
 	tempAddr.sin_addr.s_addr = clientaddr.sin_addr.s_addr; // If this doesn't work, use INADDR_ANY
-	tempAddr.sin_port = htons(clientTid);
+	tempAddr.sin_port = htons(tid);
 
 	int mainSocket = Socket(AF_INET, SOCK_DGRAM, 0);
 	Bind(mainSocket, (sockaddr *)&tempAddr, sizeof(tempAddr));
 
 	// set DATA as the op code of the buffer
-	write16(&sendBuf_, OP_DATA);
+	write16(sendBuffer, OP_DATA);
 
 	myfile.open(buffer);
 	socklen_t socklen;
 	while(!myfile.eof()) {
-	char* sendBuf_ = sendBuffer + 2;
 		
 		// set the block number.
-		write16(&sendBuf_, blocknum);
+		write16(sendBuffer+2, blocknum);
 		
 		// write the next 512 bytes into the buffer
 		// myfile.seekg(track);
@@ -282,7 +303,7 @@ void RRQ_handle(int len, char * buffer, struct sockaddr_in &clientaddr, unsigned
 	
 }
 
-void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, unsigned short int tid){
+void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, unsigned short tid){
 	// len = the length of the input buffer
 	// inputBuffer only contains 
 	//  string    1 byte     string   1 byte
@@ -291,12 +312,13 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
   //  ---------------------------------------
 	uint16_t blocknum = 0;
 	uint16_t nextBlocknum = 1;
+
+	if (vDEBUG) printf ("Writing on port %u\n", tid);
 	
 	char recvBuffer[516]; // Buffer to recv with
 	char sendBuffer[4]; // Buffer to craft and send with
-	char* sendBuf_ = sendBuffer;
 
-	const unsigned short int clientTid = ntohs(clientaddr.sin_port);
+	const unsigned short clientTid = ntohs(clientaddr.sin_port);
 	// const unsigned short int serverTid = tid;
 
   // Craft Socket	
@@ -304,7 +326,7 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 	bzero(&tempAddr, sizeof(tempAddr));
 	tempAddr.sin_family = AF_INET;
 	tempAddr.sin_addr.s_addr = clientaddr.sin_addr.s_addr; // If this doesn't work, use INADDR_ANY
-	tempAddr.sin_port = htons(clientTid);
+	tempAddr.sin_port = htons(tid);
 
 	int mainSocket = Socket(AF_INET, SOCK_DGRAM, 0);
 	Bind(mainSocket, (struct sockaddr *)&tempAddr, sizeof(tempAddr));
@@ -319,10 +341,8 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 	while (!EOF_) {
 		// Craft ACK
 		memset(sendBuffer, 0, sizeof(sendBuffer));
-		sendBuf_ = sendBuffer;
-		write16(&sendBuf_, uint16_t(OP_ACK));
-		sendBuf_ += 2;
-		write16(&sendBuf_, uint16_t(nextBlocknum - 1));
+		write16(sendBuffer, uint16_t(OP_ACK));
+		write16(sendBuffer+2, uint16_t(nextBlocknum - 1));
 	
 	  // Send ACK
 		socklen_t adrsize = sizeof(tempAddr);
@@ -359,7 +379,7 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 				exit(1);
 			} else {
 				//If packet is DATA, check to see if it has the expected blocknum
-				blocknum = ntohs((recvBuffer[2] << 8) | recvBuffer[3]);
+				blocknum = (recvBuffer[2] << 8) | recvBuffer[3];
 				if (nextBlocknum == blocknum)
 				{
 					//If it is the expected blocknum write to file
@@ -383,10 +403,8 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 
 	//Send final ACK and Kill (maybe we need to wait?)
 	memset(sendBuffer, 0, sizeof(sendBuffer));
-	sendBuf_ = sendBuffer;
-	write16(&sendBuf_, uint16_t(OP_ACK));
-	sendBuf_ += 2;
-	write16(&sendBuf_, uint16_t(blocknum));
+	write16(sendBuffer, uint16_t(OP_ACK));
+	write16(sendBuffer+2, uint16_t(blocknum));
 	socklen_t socklen = sizeof(tempAddr);
 	Sendto(mainSocket, sendBuffer, 4, 0, (struct sockaddr*)&tempAddr, socklen);
 	
