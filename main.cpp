@@ -178,6 +178,28 @@ int main(int argc, char **argv)
 	return 0;
 }
 
+
+void printFile (char* file_path) {
+
+	FILE* fp;
+	if (vDEBUG) {
+		printf ("Printing file: [%s]\n", file_path);
+		fflush (0);
+	}
+	char buf[512];
+	fp = fopen(file_path, "r");
+	if (fp == NULL) {
+		if (vDEBUG) fprintf (stderr, "Error opening file [%s].\n", file_path);
+		return;
+	}
+	
+	while(fgets(buf, sizeof(buf), fp) != NULL) {
+		printf ("%s", buf);
+	}
+	fflush (0);
+	fclose (fp);
+}
+
 void write16 (char* dst, uint16_t data) {
 	// write data into the first 2 bytes of dst
 	*(dst) = (uint8_t) (data >> 8);
@@ -323,7 +345,6 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
   // |  Filename  |   0  |    Mode    |   0  |
   //  ---------------------------------------
 	uint16_t blocknum = 1;
-	uint16_t nextBlocknum = 1;
 
 	if (vDEBUG) printf ("Writing on port %u\n", tid);
 	
@@ -349,6 +370,7 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 	int i, n;
 	bool EOF_ = false;
 	uint16_t op_code;
+	uint32_t bytes_written = 0;
 
 	// send initial ACK
 	socklen_t adrsize = sizeof(childServerAddr);
@@ -394,8 +416,6 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 			op_code = (recvBuffer[0] << 8) | recvBuffer[1];
 			uint16_t data_block_num = ((unsigned char) recvBuffer[3]) | (( (unsigned char) recvBuffer[2]) << 8);
 
-			if (vDEBUG) fprintf (stderr, "%u => %u\n", data_block_num, UINT16_MAX_);
-
 			if (vDEBUG) {
 				printf ("OP code: %s\n", op_code == OP_DATA ? "IS_DATA": "NOT_DATA");
 				fflush(0);
@@ -423,12 +443,18 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 			else if (data_block_num == UINT16_MAX_) {
 				if (vDEBUG) fprintf (stderr, "Maximum block value recieved. Cannot read any more.\n");
 
+				// fputs(recvBuffer+4, writeFile);
+				fwrite(recvBuffer + 4, sizeof(char), n-4, writeFile);
+				bytes_written += n-4;
+				if (vDEBUG) printf ("Bytes Written: %d\n", bytes_written);
 				// send final ACK
 				write16(sendBuffer, (uint16_t) OP_ACK);
 				write16(sendBuffer+2, (uint16_t) blocknum);
 				Sendto(mainSocket, sendBuffer, 4, 0, (struct sockaddr*)&clientaddr, adrsize);
 
 				fclose(writeFile);
+				if (false) printFile (inputBuffer);
+
 				Close(mainSocket);
 				return;
 			}
@@ -441,7 +467,10 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 			
 				// write the data to our file.
 				if (n < 516) recvBuffer[n] = 0;
-				fputs(recvBuffer+4, writeFile);
+				// fputs(recvBuffer+4, writeFile);
+				fwrite(recvBuffer + 4, sizeof(char), n-4, writeFile);
+				bytes_written += n-4;
+				if (vDEBUG) printf ("Bytes Written: %d\n", bytes_written);
 
 				// send the ACK
 				write16(sendBuffer, (uint16_t) OP_ACK);
@@ -452,7 +481,10 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 				// if this is the last packet
 				if (n < 516) {
 					if (vDEBUG) printf("Finished sending file!\n");
+
 					fclose(writeFile);
+					if (false) printFile (inputBuffer);
+
 					Close(mainSocket);
 					return;
 				}
