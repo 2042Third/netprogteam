@@ -71,7 +71,7 @@ int main(int argc, char **argv)
   unsigned short startPort = (short) atoi(argv[1]);
 	unsigned short maxPort = (short) atoi(argv[2]);
 
-	unsigned short int TID = startPort;
+	unsigned short TID = startPort;
 	struct sockaddr_in servaddr, cliaddr;
 	bzero(&servaddr, sizeof(servaddr));
 	bzero(&cliaddr, sizeof(cliaddr));
@@ -80,7 +80,7 @@ int main(int argc, char **argv)
 	servaddr.sin_port = htons(TID);
 
 	int listeningSocket = Socket(AF_INET, SOCK_DGRAM, 0);
-	bind(listeningSocket, (sockaddr *)&servaddr, sizeof(servaddr));
+	Bind(listeningSocket, (sockaddr *)&servaddr, sizeof(servaddr));
 	++TID;
 
 	char buffer[MSS];
@@ -130,6 +130,16 @@ int main(int argc, char **argv)
 			sendError (listeningSocket, cliaddr, ERR_ILLEGAL_TFTP_OP, "Illegal TFTP OP");
 		}
 		
+		if (vDEBUG) {
+			printf ("Filename len: %ld\n", strlen(buffer + 2));
+			printf ("Mode: %s\n", buffer + strlen(buffer + 2) + 3);
+		}
+		if (strcmp(buffer + strlen(buffer + 2) + 3, "octet") != 0) {
+			if (vDEBUG) fprintf (stderr, "Mode is not binary. Terminating.\n");
+			sendError(listeningSocket, cliaddr, ERR_ILLEGAL_TFTP_OP, "Not supported");
+			continue;
+		}
+
 		/*
 			If we get a Read request:
 				(1) if the file doesnt exist, send an error
@@ -152,16 +162,6 @@ int main(int argc, char **argv)
 			continue;
 		}
 
-		if (vDEBUG) {
-			printf ("Filename len: %ld\n", strlen(buffer + 2));
-			printf ("Mode: %s\n", buffer + strlen(buffer + 2) + 3);
-		}
-		if (strcmp(buffer + strlen(buffer + 2) + 3, "octet") != 0) {
-			if (vDEBUG) fprintf (stderr, "Mode is not binary. Terminating.\n");
-			sendError(listeningSocket, cliaddr, ERR_ILLEGAL_TFTP_OP, "Not supported");
-			continue;
-		}
-
 		// Fork and let the child handle the rest of that TID's tftp
 		pid_t pid = Fork();
 		if (pid == 0)
@@ -170,9 +170,11 @@ int main(int argc, char **argv)
 			if (op_code == OP_READ) {
 				// If it's RRQ, send the first data
 				RRQ_handle(n, buffer + 2, cliaddr, TID);
+				exit(0);
 			} else if (op_code == OP_WRITE) {
 				// If it's WRQ, send an ack with block num = 0
 				WRQ_handle(n - 2, buffer + 2, cliaddr, TID);
+				exit(0);
 			}
 		}
 		//Parent
@@ -182,7 +184,6 @@ int main(int argc, char **argv)
 	}
 
 	// Close all connections and terminate the server
-
 	return 0;
 }
 
@@ -374,7 +375,7 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 	childServerAddr.sin_port = htons(tid);
 
 	int mainSocket = Socket(AF_INET, SOCK_DGRAM, 0);
-	Bind(mainSocket, (struct sockaddr *)&childServerAddr, sizeof(childServerAddr));
+	Bind(mainSocket, (sockaddr *)&childServerAddr, sizeof(childServerAddr));
 
 	// Open file
 	FILE * writeFile = fopen(inputBuffer, "w");
