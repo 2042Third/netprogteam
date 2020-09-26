@@ -152,6 +152,16 @@ int main(int argc, char **argv)
 			continue;
 		}
 
+		if (vDEBUG) {
+			printf ("Filename len: %ld\n", strlen(buffer + 2));
+			printf ("Mode: %s\n", buffer + strlen(buffer + 2) + 3);
+		}
+		if (strcmp(buffer + strlen(buffer + 2) + 3, "octet") != 0) {
+			if (vDEBUG) fprintf (stderr, "Mode is not binary. Terminating.\n");
+			sendError(listeningSocket, cliaddr, ERR_ILLEGAL_TFTP_OP, "Not supported");
+			continue;
+		}
+
 		// Fork and let the child handle the rest of that TID's tftp
 		pid_t pid = Fork();
 		if (pid == 0)
