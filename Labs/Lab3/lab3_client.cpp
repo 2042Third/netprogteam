@@ -32,9 +32,9 @@ int main () {
     {
       unsigned short int inputnum;
       scanf("%hu", &inputnum);
-      #ifdef DEBUG_
-      std::cout<<"Received port #: "<<inputnum<<std::endl;
-      #endif
+      // #ifdef DEBUG_
+      // std::cout<<"Received port #: "<<inputnum<<std::endl;
+      // #endif
       
       int loc;
       for (loc = 0; loc < 5; loc++) {
@@ -49,15 +49,15 @@ int main () {
         serveraddr.sin_port = htons(inputnum);
         ports[loc] = inputnum;
 
-        #ifdef DEBUG_
-          std::cout<<"Addr: "<<inet_ntoa(serveraddr.sin_addr)<<std::endl;
-        #endif
+        // #ifdef DEBUG_
+        //   std::cout<<"Addr: "<<inet_ntoa(serveraddr.sin_addr)<<std::endl;
+        // #endif
         
         Connect(sockfd, (struct sockaddr *)&serveraddr, sizeof(serveraddr));
         servers[loc] = sockfd;
-        #ifdef DEBUG_
-          std::cout << "Connected to port #: " << ports[loc] << std::endl;
-        #endif
+        // #ifdef DEBUG_
+        //   std::cout << "Connected to port #: " << ports[loc] << std::endl;
+        // #endif
       }
     }
 

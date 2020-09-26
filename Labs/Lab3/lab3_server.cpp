@@ -43,15 +43,15 @@ int main (int argc, char** argv) {
       // Or do we ignore the connections by reading them and letting them go?
       FD_SET(clientSd, &readfds);
       nfds = nfds > clientSd ? nfds : clientSd;
-      #ifdef DEBUG_
-      std::cout<<"Only stdin and client now"<<std::endl;
-      #endif
+      // #ifdef DEBUG_
+      // std::cout<<"Only stdin and client now"<<std::endl;
+      // #endif
     } else {
       FD_SET(sockfd, &readfds);
       nfds = nfds > sockfd ? nfds : sockfd;
-      #ifdef DEBUG_
-      std::cout<<"Only stdin now"<<std::endl;
-      #endif
+      // #ifdef DEBUG_
+      // std::cout<<"Only stdin now"<<std::endl;
+      // #endif
     }
 
     Select(nfds + 1, &readfds, NULL, NULL, NULL);
@@ -60,18 +60,18 @@ int main (int argc, char** argv) {
       // Read the client reply and throw it away
       char throwAwayBuff[MSS];
       int n = Recv(clientSd, &throwAwayBuff, MSS, 0);
-      #ifdef DEBUG_
-      std::cout<<"Accepted Echo Reply"<<std::endl;
-      #endif
+      // #ifdef DEBUG_
+      // std::cout<<"Accepted Echo Reply"<<std::endl;
+      // #endif
       if (n == 0) {
         std::cout<<"strcli: client disconnected"<<std::endl;
         clientSd = -1;
       }
     } else if (clientSd == -1 && FD_ISSET(sockfd, &readfds)) {
       // We can accept the new client connection
-      #ifdef DEBUG_
-      std::cout<<"Accepting connection"<<std::endl;
-      #endif
+      // #ifdef DEBUG_
+      // std::cout<<"Accepting connection"<<std::endl;
+      // #endif
       clientSd = Accept(sockfd, NULL, NULL);
       std::cout<<"Accepted connection"<<std::endl;
     }
