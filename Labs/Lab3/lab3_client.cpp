@@ -49,6 +49,7 @@ int main () {
       inet_aton("127.0.0.1", &(serveraddr.sin_addr));
       serveraddr.sin_port = htons(inputnum);
       ports[loc] = inputnum;
+
       #ifdef DEBUG_
         std::cout << "Connected to port #: " << ports[loc] << std::endl;
       #endif
