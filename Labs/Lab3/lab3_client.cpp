@@ -37,10 +37,12 @@ int main () {
       // #endif
       
       int loc;
-      for (loc = 0; loc < 5; loc++) {
+      bool portExists = false;
+      for (loc = portExists = 0; loc < 5; loc++) { // Check we have a slot
+        if (ports[loc] == inputnum) portExists = true;
         if (servers[loc] == -1) break;
       }
-      if (loc < 5) { // Space for a connection
+      if (loc < 5 && !portExists) { // Space for a connection
         sockfd = Socket(AF_INET, SOCK_STREAM, 0);
 
         bzero(&serveraddr, sizeof(serveraddr));
