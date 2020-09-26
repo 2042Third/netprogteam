@@ -1,5 +1,6 @@
 #include <iostream>
 #include <stdio.h>
+#include <cstdlib>
 extern "C" {
   #include "unp.h"
 }
@@ -17,7 +18,7 @@ int main (int argc, char** argv) {
   bzero(&serveraddr, sizeof(serveraddr));
   serveraddr.sin_family = AF_INET;
   serveraddr.sin_addr.s_addr = htonl(INADDR_ANY);
-  serveraddr.sin_port = htonl(9877+input_num);
+  serveraddr.sin_port = htonl(9877 + (unsigned short) atoi(argv[1]));
   // Bind
   Bind(sockfd, (struct sockaddr*)&serveraddr, sizeof(serveraddr));
   
@@ -36,7 +37,7 @@ int main (int argc, char** argv) {
   while (!isEOF) {
     
     FD_ZERO(&readfds);
-    FD_SET(stdin, &readfds);
+    FD_SET(fileno(stdin), &readfds);
     nfds = fileno(stdin);
     if (clientSd != -1) { // Client connected, so don't check listen ???
       // Or do we ignore the connections by reading them and letting them go?
@@ -47,18 +48,18 @@ int main (int argc, char** argv) {
       nfds = nfds > sockfd ? nfds : sockfd;
     }
 
-    Select(nfds + 1, &readfd, NULL, NULL, NULL);
+    Select(nfds + 1, &readfds, NULL, NULL, NULL);
 
-    if (clientSd != -1 && FD_ISSET(clientSd)) {
+    if (clientSd != -1 && FD_ISSET(clientSd, &readfds)) {
       // Read the client reply and throw it away
       char throwAwayBuff[MSS];
       Recv(clientSd, &throwAwayBuff, MSS, 0);
-    } else if (clientSd == -1 && FD_ISSET(sockfd)) {
+    } else if (clientSd == -1 && FD_ISSET(sockfd, &readfds)) {
       // We can accept the new client connection
       clientSd = Accept(sockfd, NULL, NULL);
     }
 
-    if (FD_ISSET(fileno(stdin))) {
+    if (FD_ISSET(fileno(stdin), &readfds)) {
       // Read from stdin <- so we can flush it even if we don't have a client
       char input[MSS];
       

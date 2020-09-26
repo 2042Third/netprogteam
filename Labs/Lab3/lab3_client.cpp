@@ -5,13 +5,13 @@ extern "C" {
   #include "unp.h"
 }
 
-#define MSS 1024;
+#define MSS 1024
 
-int main (int argc, char * argv) {
+int main () {
   fd_set readfd;
-  int sock, sockfd, nfds;
-  int servers[5]; memset(servers, -1, 5); // -1 if it's a free slot, else it's the clientSd
-  unsigned short int ports[5]; memset(ports, -1, 5); // -1 if it's unassigned, else it's the port #.
+  int sockfd, nfds;
+  int servers[5]; memset(servers, -1, 5*sizeof(int)); // -1 if it's a free slot, else it's the clientSd
+  unsigned short int ports[5]; memset(ports, -1, 5*sizeof(int)); // -1 if it's unassigned, else it's the port #.
   struct sockaddr_in serveraddr;
 
   //select
@@ -30,7 +30,7 @@ int main (int argc, char * argv) {
 
     if (FD_ISSET(fileno(stdin), &readfd))
     {
-      unsigned int inputnum;
+      unsigned short int inputnum;
       scanf("%hu", &inputnum);
       #ifdef DEBUG_
       std::cout<<"Received port #: "<<inputnum<<std::endl;
@@ -46,27 +46,27 @@ int main (int argc, char * argv) {
 
       bzero(&serveraddr, sizeof(serveraddr));
       serveraddr.sin_family = AF_INET;
-      inet_aton("127.0.0.1", &(serveraddr.sin_addr.s_addr));
+      inet_aton("127.0.0.1", &(serveraddr.sin_addr));
       serveraddr.sin_port = htons(inputnum);
       ports[loc] = inputnum;
-      
-      Connect(sockfd, (struct sockaddr *)&serveraddr, sizeof(serveraddr));
-      server[loc] = sockfd;
       #ifdef DEBUG_
         std::cout << "Connected to port #: " << ports[loc] << std::endl;
       #endif
+      
+      Connect(sockfd, (struct sockaddr *)&serveraddr, sizeof(serveraddr));
+      servers[loc] = sockfd;
       
     }
 
     char buffer[MSS];
     for (int loc = 0; loc < 5; loc++) {
-      if (FD_ISSET(servers[loc], &readfds)) {
+      if (FD_ISSET(servers[loc], &readfd)) {
         int n = Recv(servers[loc], buffer, MSS, 0);
         if (n > 0) {//recved something, echoing
           
           std::cout<< ports[loc] << ": " << buffer << std::endl;
           
-          Send(servers[loc], buffer, MSS, NULL);
+          Send(servers[loc], buffer, MSS, 0);
 
         } else if (n == 0) { // Server terminated
           std::cout<< ports[loc] << ": Connection Terminated" << std::endl;
