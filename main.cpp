@@ -80,11 +80,7 @@ int main(int argc, char **argv)
 	servaddr.sin_port = htons(TID);
 
 	int listeningSocket = Socket(AF_INET, SOCK_DGRAM, 0);
-	int res;
-	while ((res = bind(listeningSocket, (sockaddr *)&servaddr, sizeof(servaddr)) ) < 0 ) {
-		++TID;
-		servaddr.sin_port = htons(TID);
-	}
+	bind(listeningSocket, (sockaddr *)&servaddr, sizeof(servaddr));
 	++TID;
 
 	char buffer[MSS];
@@ -110,14 +106,15 @@ int main(int argc, char **argv)
 		/*
 			If we do not exceed the maximum allowed connections...
 		*/
-		if (TID >= maxPort)
+		if (TID > maxPort)
 		{
+			if (vDEBUG) fprintf (stderr, "Ran out of ports.\n");
 			// Send error packet
-			// sendError(listeningSocket, cliaddr, ERR_NOT_DEF, "No TID Available");
+			sendError(listeningSocket, cliaddr, ERR_NOT_DEF, "No TID Available");
 			break; // Break and terminate server
 		}
 		// Got a connection, do the initialization
-		short op_code = (buffer[0] << 8) | buffer[1];
+		short op_code = ntohs(*((unsigned short int *)(buffer)));
 		if (vDEBUG) {
 			printf ("op code => %d\n", (int) op_code);
 		}
@@ -129,6 +126,7 @@ int main(int argc, char **argv)
 		*/
 		if (op_code != OP_READ && op_code != OP_WRITE) {
 			// send ERR
+			if (vDEBUG) fprintf (stderr, "Invalid op code: %u\n", op_code);
 			sendError (listeningSocket, cliaddr, ERR_ILLEGAL_TFTP_OP, "Illegal TFTP OP");
 		}
 		
@@ -238,7 +236,7 @@ bool fileExists (char* fileName) {
 
 
 void readHeader (char* recvBuffer, uint16_t *op_code, uint16_t *recv_block_num) {
-	*op_code = ((unsigned char) (recvBuffer[0] << 8)) | ((unsigned char) recvBuffer[1]);
+	*op_code = ntohs(*((unsigned short int *)(recvBuffer)));
 	*recv_block_num = (((unsigned char) recvBuffer[2]) << 8) | ((unsigned char) recvBuffer[3]);
 }
 
@@ -258,7 +256,7 @@ void RRQ_handle(int len, char * buffer, struct sockaddr_in &clientaddr, unsigned
 	struct sockaddr_in tempAddr;
 	bzero(&tempAddr, sizeof(tempAddr));
 	tempAddr.sin_family = AF_INET;
-	tempAddr.sin_addr.s_addr = clientaddr.sin_addr.s_addr; // If this doesn't work, use INADDR_ANY
+	tempAddr.sin_addr.s_addr = htonl(INADDR_ANY); // If this doesn't work, use INADDR_ANY
 	tempAddr.sin_port = htons(tid);
 
 	int mainSocket = Socket(AF_INET, SOCK_DGRAM, 0);
@@ -362,7 +360,7 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 	struct sockaddr_in childServerAddr;
 	bzero(&childServerAddr, sizeof(childServerAddr));
 	childServerAddr.sin_family = AF_INET;
-	childServerAddr.sin_addr.s_addr = clientaddr.sin_addr.s_addr; // If this doesn't work, use INADDR_ANY
+	childServerAddr.sin_addr.s_addr = htonl(INADDR_ANY); // If this doesn't work, use INADDR_ANY
 	childServerAddr.sin_port = htons(tid);
 
 	int mainSocket = Socket(AF_INET, SOCK_DGRAM, 0);
@@ -390,6 +388,14 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 		adrsize = sizeof(childServerAddr);
 		memset(recvBuffer, 0, 516);
 		for (i = 0; i < 10; ++i) {
+
+			// if we timeout, resend ack
+			if (i != 0) {
+				write16(sendBuffer, (uint16_t) OP_ACK);
+				write16(sendBuffer+2, (uint16_t) blocknum-1);
+				Sendto(mainSocket, sendBuffer, 4, 0, (struct sockaddr*)&clientaddr, adrsize);
+			}
+
 			n = -2;
 			alarm (1);
 			n = Recvfrom(mainSocket, recvBuffer, 516, 0, (struct sockaddr*)&clientaddr, &adrsize);
@@ -417,7 +423,7 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 				(1) block is correct
 				(2) TID is correct
 			*/
-			op_code = (recvBuffer[0] << 8) | recvBuffer[1];
+			op_code = ntohs(*((unsigned short int *)(recvBuffer)));
 			uint16_t data_block_num = ((unsigned char) recvBuffer[3]) | (( (unsigned char) recvBuffer[2]) << 8);
 
 			if (vDEBUG) {
@@ -440,6 +446,9 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 					fprintf (stderr, "OP code is not DATA\n");
 					fflush(0);
 				}
+
+				// TODO send error
+				sendError(mainSocket, childServerAddr, ERR_NOT_DEF, "Unexpected response: OP code is not DATA");
 				continue;
 			}
 
@@ -457,9 +466,11 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 				Sendto(mainSocket, sendBuffer, 4, 0, (struct sockaddr*)&clientaddr, adrsize);
 
 				fclose(writeFile);
+				writeFile = NULL;
 				if (false) printFile (inputBuffer);
 
 				Close(mainSocket);
+				mainSocket = -1;
 				return;
 			}
 
@@ -487,10 +498,12 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 					if (vDEBUG) printf("Finished sending file!\n");
 
 					fclose(writeFile);
+					writeFile = NULL;
 					if (false) printFile (inputBuffer);
 
 					Close(mainSocket);
-					return;
+					mainSocket = -1;
+					break;
 				}
 			}
 			else {
@@ -502,15 +515,8 @@ void WRQ_handle(int len, char * inputBuffer, struct sockaddr_in &clientaddr, uns
 			}
 		}
 	}
-
-	//Send final ACK and Kill (maybe we need to wait?)
-	memset(sendBuffer, 0, sizeof(sendBuffer));
-	write16(sendBuffer, uint16_t(OP_ACK));
-	write16(sendBuffer+2, uint16_t(blocknum));
-	socklen_t socklen = sizeof(childServerAddr);
-	Sendto(mainSocket, sendBuffer, 4, 0, (struct sockaddr*)&childServerAddr, socklen);
 	
-	fclose(writeFile);
-	Close(mainSocket);
+	if (writeFile != NULL) fclose(writeFile);
+	if (mainSocket != -1) Close(mainSocket);
 	exit(0);
 }
