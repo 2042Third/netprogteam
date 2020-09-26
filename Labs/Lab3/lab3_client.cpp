@@ -40,23 +40,25 @@ int main () {
       for (loc = 0; loc < 5; loc++) {
         if (servers[loc] == -1) break;
       }
-      if (loc >= 5) break; // No connection can be made.
+      if (loc < 5) { // Space for a connection
+        sockfd = Socket(AF_INET, SOCK_STREAM, 0);
 
-      sockfd = Socket(AF_INET, SOCK_STREAM, 0);
+        bzero(&serveraddr, sizeof(serveraddr));
+        serveraddr.sin_family = AF_INET;
+        inet_aton("127.0.0.1", &(serveraddr.sin_addr));
+        serveraddr.sin_port = htons(inputnum);
+        ports[loc] = inputnum;
 
-      bzero(&serveraddr, sizeof(serveraddr));
-      serveraddr.sin_family = AF_INET;
-      inet_aton("127.0.0.1", &(serveraddr.sin_addr));
-      serveraddr.sin_port = htons(inputnum);
-      ports[loc] = inputnum;
-
-      #ifdef DEBUG_
-        std::cout << "Connected to port #: " << ports[loc] << std::endl;
-      #endif
-      
-      Connect(sockfd, (struct sockaddr *)&serveraddr, sizeof(serveraddr));
-      servers[loc] = sockfd;
-      
+        #ifdef DEBUG_
+          std::cout<<"Addr: "<<inet_ntoa(serveraddr.sin_addr)<<std::endl;
+        #endif
+        
+        Connect(sockfd, (struct sockaddr *)&serveraddr, sizeof(serveraddr));
+        servers[loc] = sockfd;
+        #ifdef DEBUG_
+          std::cout << "Connected to port #: " << ports[loc] << std::endl;
+        #endif
+      }
     }
 
     char buffer[MSS];
@@ -64,13 +66,13 @@ int main () {
       if (FD_ISSET(servers[loc], &readfd)) {
         int n = Recv(servers[loc], buffer, MSS, 0);
         if (n > 0) {//recved something, echoing
-          
+          buffer[strlen(buffer) - 1] = buffer[strlen(buffer) - 1] == '\n' ? '\0' : buffer[strlen(buffer) - 1];
           std::cout<< ports[loc] << ": " << buffer << std::endl;
           
           Send(servers[loc], buffer, MSS, 0);
 
         } else if (n == 0) { // Server terminated
-          std::cout<< ports[loc] << ": Connection Terminated" << std::endl;
+          std::cout<< "Server on " << ports[loc] << " closed" << std::endl;
           Close(servers[loc]);
           servers[loc] = -1;
           ports[loc] = -1;
