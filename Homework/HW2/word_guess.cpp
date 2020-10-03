@@ -37,6 +37,7 @@ bool compareWord(std::string Guess, std::string Secret);
 
 // No invariants and assertions, since it was rushed
 // Used to keep track of the client socket and username mapping, with getters and setters
+// Usernames are converted to lowercase and stored.
 class UserDatabase {
   public:
     int numClients() {return cliSocketUserMap.size(); } // Returns the number of connected clients
@@ -122,6 +123,7 @@ void UserDatabase::rmClient(int socket) {
 // Binds a username to the client (modifies map and set) if the username is not registered.
 // Returns true if successful registration, false if it was already taken
 bool UserDatabase::Register (int socket, std::string username) {
+  username = stringToLower(username);
   if (this->usernames.find(username) == this->usernames.end()) { // Not taken
     this->cliSocketUserMap[socket] = username;
     this->usernames.insert(username);
