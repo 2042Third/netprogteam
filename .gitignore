@@ -1,5 +1,7 @@
 *.o
+*.out
 tftp
 
 # Ignore the data file writtin over tftp
 data.txt
+*.txt
