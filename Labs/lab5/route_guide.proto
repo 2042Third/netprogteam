@@ -108,4 +108,7 @@ message RouteSummary {
 
   // The duration of the traversal in seconds.
   int32 elapsed_time = 4;
+
+  // the id of the route stored in the server's database
+  int32 route_id = 5;
 }

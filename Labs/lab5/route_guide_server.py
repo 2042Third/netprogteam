@@ -103,9 +103,9 @@ class RouteGuideServicer(route_guide_pb2_grpc.RouteGuideServicer):
             prev_point = point
 
         # Add this route to the server route database.
-        # The id for this route is its insert index + 1
-        RouteGuideServicer.routes.append(route_info)
+        # The id for this route is its insert index
         route_id = len(RouteGuideServicer.routes)
+        RouteGuideServicer.routes.append(route_info)
 
         print ("Route {} added!".format(route_id))
 
@@ -113,7 +113,8 @@ class RouteGuideServicer(route_guide_pb2_grpc.RouteGuideServicer):
         return route_guide_pb2.RouteSummary(point_count=point_count,
                                             feature_count=feature_count,
                                             distance=int(distance),
-                                            elapsed_time=int(elapsed_time))
+                                            elapsed_time=int(elapsed_time),
+                                            route_id=route_id)
 
     def RouteChat(self, request_iterator, context):
         prev_notes = []
