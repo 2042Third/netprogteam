@@ -79,6 +79,22 @@ def guide_record_route(stub):
     print("It took %s seconds " % route_summary.elapsed_time)
     print("The id of the route is %s" % route_summary.route_id)
 
+def guide_route_retrieve(stub, id):
+
+    route_stream = stub.RouteRetrieve(route_guide_pb2.RouteID(
+        route_id=id
+    ))
+
+    count = 0
+    for point_ in route_stream:
+        print("Point Index = {}: latitude={}, longitude={}".format(count, point_.latitude, point_.longitude))
+        count = count + 1
+    
+    if (count == 0):
+        print("No route found for route_id {}".format(id))
+    else:
+        print("SUMMARY===================================")
+        print("{} points found for route_id {}".format(count, id))
 
 def generate_messages():
     messages = [
@@ -114,6 +130,10 @@ def run():
         guide_record_route(stub)
         print("-------------- RouteChat --------------")
         guide_route_chat(stub)
+        print("-------------- RetrieveRoute [ID = 999] --------------")
+        guide_route_retrieve(stub, 999)
+        print("-------------- RetrieveRoute [ID = 0] --------------")
+        guide_route_retrieve(stub, 0)
 
 
 if __name__ == '__main__':

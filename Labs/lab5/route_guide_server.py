@@ -84,6 +84,19 @@ class RouteGuideServicer(route_guide_pb2_grpc.RouteGuideServicer):
                     feature.location.latitude <= top):
                 yield feature
 
+    # RouteRetrieve:
+    #   @desc return the route that is associated with the id passed
+    #   to request.route_id.
+    #   If a route at the id does not exist, return an empty list
+    def RouteRetrieve(self, request, context):
+        route_id = request.route_id
+        print("Route with {} requested.".format(route_id))
+
+        if (route_id < len(RouteGuideServicer.routes)):
+            for route_ in RouteGuideServicer.routes[route_id]:
+                yield route_
+        
+
     def RecordRoute(self, request_iterator, context):
         point_count = 0
         feature_count = 0
