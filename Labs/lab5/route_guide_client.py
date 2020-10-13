@@ -77,6 +77,7 @@ def guide_record_route(stub):
     print("Passed %s features " % route_summary.feature_count)
     print("Travelled %s meters " % route_summary.distance)
     print("It took %s seconds " % route_summary.elapsed_time)
+    print("The id of the route is %s" % route_summary.route_id)
 
 
 def generate_messages():
