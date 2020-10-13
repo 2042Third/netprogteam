@@ -58,6 +58,10 @@ def get_distance(start, end):
 class RouteGuideServicer(route_guide_pb2_grpc.RouteGuideServicer):
     """Provides methods that implement functionality of route guide server."""
 
+    # Create an array of the route information
+    # that will be remembered by the server
+    routes = []
+
     def __init__(self):
         self.db = route_guide_resources.read_route_guide_database()
 
@@ -86,14 +90,24 @@ class RouteGuideServicer(route_guide_pb2_grpc.RouteGuideServicer):
         distance = 0.0
         prev_point = None
 
+        route_info = []
+
         start_time = time.time()
         for point in request_iterator:
+            route_info.append(point)
             point_count += 1
             if get_feature(self.db, point):
                 feature_count += 1
             if prev_point:
                 distance += get_distance(prev_point, point)
             prev_point = point
+
+        # Add this route to the server route database.
+        # The id for this route is its insert index + 1
+        RouteGuideServicer.routes.append(route_info)
+        route_id = len(RouteGuideServicer.routes)
+
+        print ("Route {} added!".format(route_id))
 
         elapsed_time = time.time() - start_time
         return route_guide_pb2.RouteSummary(point_count=point_count,
