@@ -50,6 +50,11 @@ service RouteGuide {
   // Accepts a stream of RouteNotes sent while a route is being traversed,
   // while receiving other RouteNotes (e.g. from other users).
   rpc RouteChat(stream RouteNote) returns (stream RouteNote) {}
+
+  // Returns either a list of points corresponding to the
+  // route that was recorded earliet with the given ID, or an
+  // empty list of the ID was invalid
+  rpc RouteRetrieve(RouteID) returns (stream Point) {}
 }
 
 // Points are represented as latitude-longitude pairs in the E7 representation
@@ -111,4 +116,11 @@ message RouteSummary {
 
   // the id of the route stored in the server's database
   int32 route_id = 5;
+}
+
+
+// A route id contains a 4-byte int that represents the id
+// of a route stored in the server's route database
+message RouteID {
+  int32 route_id = 1;
 }
