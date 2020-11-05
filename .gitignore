@@ -11,3 +11,5 @@ grpc/
 *.txt
 
 route_guide_pb2*
+*.vscode
+*__pycache__

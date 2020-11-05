@@ -1,5 +1,5 @@
-INC=-I../../unpv13e/lib
-LIB=-L../../unpv13e
+INC=-I../../../netprog/unpv13e/lib
+LIB=-L../../../netprog/unpv13e
 
 main: word_guess.cpp
 	clang word_guess.cpp libunp.a -lstdc++ -o word_guess.out

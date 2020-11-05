@@ -149,14 +149,18 @@ int main (int argc, char** argv) {
     if(FD_ISSET(server_fd, &ReadSet) && system.numClients() < 5)
     { 
       //    accept connection
-      int client_socket = accept(server_fd, NULL, NULL);
+      struct sockaddr_in trashaddr;
+      bzero(&trashaddr, sizeof(trashaddr));
+      socklen_t t_len = sizeof(trashaddr);
+      int client_socket = accept(server_fd,(struct sockaddr*) &trashaddr, &t_len);
+      if (vDEBUG) printf("Port: %d\n", ntohs(trashaddr.sin_port));
       if(client_socket == -1)
       {
         if (vDEBUG) perror("Failed to accept connection\n");
         exit(EXIT_FAILURE);
       }
-      //    send msg "Welcome to Guess the Word, please enter your username."
-      std::string welcome_string = "Welcome to Guess the Word, please enter your username.";
+      // send msg "Welcome to Guess the Word, please enter your username."
+      std::string welcome_string = std::to_string(ntohs(trashaddr.sin_port)) + " Welcome to Guess the Word, please enter your username.";
       system.addClient(client_socket);
       check = send(client_socket, welcome_string.c_str(), welcome_string.length(), 0);
       if(check == -1) {
