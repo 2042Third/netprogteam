@@ -12,46 +12,46 @@
 
 #include <string.h> // For memset
 
-// Creates a copy of {addr} at the end of {list}
-// Returns list
-char** append(char** list, char* addr) {
-  char** x = list;
-  while (*x != NULL) {x++;}
-  int len = x - list + 1;
-  list = realloc(list, sizeof(char*) * (len + 1));
-  if (list == NULL) {
-    perror("Realloc failed\n");
-    exit(-1);
-  }
-  char* temp = calloc(strlen(addr) + 1, sizeof(char));
-  if (temp == NULL) {
-    perror("Calloc failed\n");
-    exit(-1);
-  }
-  memcpy(temp, addr, strlen(addr));
-  list[len - 1] = temp;
-  list[len] = NULL;
-  return list;
-}
+// // Creates a copy of {addr} at the end of {list}
+// // Returns list
+// char** append(char** list, char* addr) {
+//   char** x = list;
+//   while (*x != NULL) {x++;}
+//   int len = x - list + 1;
+//   list = realloc(list, sizeof(char*) * (len + 1));
+//   if (list == NULL) {
+//     perror("Realloc failed\n");
+//     exit(-1);
+//   }
+//   char* temp = calloc(strlen(addr) + 1, sizeof(char));
+//   if (temp == NULL) {
+//     perror("Calloc failed\n");
+//     exit(-1);
+//   }
+//   memcpy(temp, addr, strlen(addr));
+//   list[len - 1] = temp;
+//   list[len] = NULL;
+//   return list;
+// }
 
-// Frees the seen list
-void freeList(char** list) {
-  char** x = list;
-  while (*x != NULL) {
-    free(*(x++));
-  }
-  free(list);
-}
+// // Frees the seen list
+// void freeList(char** list) {
+//   char** x = list;
+//   while (*x != NULL) {
+//     free(*(x++));
+//   }
+//   free(list);
+// }
 
-// Returns 1 if {interest} occurs in {list}, 0 otherwise
-int hasBeenSeen(char** list, char* interest) {
-  while (*list != NULL) {
-    if (strcmp(*(list++), interest) == 0) {
-      return 1;
-    }
-  }
-  return 0;
-}
+// // Returns 1 if {interest} occurs in {list}, 0 otherwise
+// int hasBeenSeen(char** list, char* interest) {
+//   while (*list != NULL) {
+//     if (strcmp(*(list++), interest) == 0) {
+//       return 1;
+//     }
+//   }
+//   return 0;
+// }
 
 int main(int argc, char** argv) {
   if (argc != 2) {
@@ -66,6 +66,7 @@ int main(int argc, char** argv) {
   struct addrinfo* resList, *ptr;
   memset(&hints, 0, sizeof(hints));
   hints.ai_family = AF_UNSPEC;
+  hints.ai_socktype = SOCK_STREAM;
   // hints.ai_socktype = 1; <-  Filtering duplicate results using a list instead of using hints.ai_socktype =1 (or 2) as we are unsure whether we are meant to 
   // hints.ai_socktype = 2;     limit it to just TCP or UDP.
   // hints.ai_flags = AI_PASSIVE; <- specifies that we only want addresses suitable for bind() or accept(). Not what we want?
@@ -79,8 +80,8 @@ int main(int argc, char** argv) {
   }
 
   char out[INET6_ADDRSTRLEN]; // INET6_ADDRSTRLEN is 46, INET_ADDRSTRLEN is 16
-  char** seen = calloc(1, sizeof(char *));
-  seen[0] = NULL;
+  // char** seen = calloc(1, sizeof(char *));
+  // seen[0] = NULL;
 
   ptr = resList;
   while (ptr != NULL) {
@@ -92,7 +93,7 @@ int main(int argc, char** argv) {
                     (void*)(&(((struct sockaddr_in *)(ptr->ai_addr))->sin_addr)),
                     out, INET_ADDRSTRLEN) == NULL) {
         perror("Failed inet_ntop\n");
-        freeList(seen);
+        // freeList(seen);
         return -1;
       }
     } else { // IPv6
@@ -100,15 +101,15 @@ int main(int argc, char** argv) {
                     (void*)(&(((struct sockaddr_in6 *)(ptr->ai_addr))->sin6_addr)),
                     out, INET6_ADDRSTRLEN) == NULL) {
         perror("Failed inet_ntop\n");
-        freeList(seen);
+        // freeList(seen);
         return -1;
       }
     }
     
-    if (!hasBeenSeen(seen, out)) {
-      seen = append(seen, out);
+    // if (!hasBeenSeen(seen, out)) {
+    //   seen = append(seen, out);
       printf("%s\n", out);
-    }
+    // }
 
     ptr = ptr->ai_next; // Next addrinfo
   }
@@ -116,7 +117,7 @@ int main(int argc, char** argv) {
 
   // Use getaddrinfo to output al IPv4 and IPv6 addresses associated with that hostName
   freeaddrinfo(resList);
-  freeList(seen);
+  // freeList(seen);
   
   return 0;
 }
