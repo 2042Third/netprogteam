@@ -11,23 +11,23 @@ import csci4220_hw3_pb2_grpc
 
 from math import log, abs
 
-# A singly linked list that we can use for the LRU???
-class LList():
-	def __init__(self, val=None, ptr = None):
-		self.ptr = ptr # Points to the next LList object
-		self.val = val
+# # A singly linked list that we can use for the LRU???
+# class LList():
+# 	def __init__(self, val=None, ptr = None):
+# 		self.ptr = ptr # Points to the next LList object
+# 		self.val = val
 
-	# Returns the index/order rank of a certain value in the given linked list
-	def getIndex(self, val):
-		ind = -1
-		nd = self
-		while (nd.val != val and nd.ptr is not None):
-			ind += 1
-			nd = nd.ptr
-		if (nd.val == val):
-			return ind + 1
-		else:
-			return -1
+# 	# Returns the index/order rank of a certain value in the given linked list
+# 	def getIndex(self, val):
+# 		ind = -1
+# 		nd = self
+# 		while (nd.val != val and nd.ptr is not None):
+# 			ind += 1
+# 			nd = nd.ptr
+# 		if (nd.val == val):
+# 			return ind + 1
+# 		else:
+# 			return -1
 
 class DHT():
 	def __init__(self, k, ourNode):
@@ -91,30 +91,6 @@ class KadImplServicer(csci4220_hw3_pb2_grpc.KadImplServicer):
 		print(f'Serving FindNode({request.idkey}) request for {request.node.id}', flush=True))
 		# closestNodes = self.DHT[round(log(distance))] # At most k nodes in this
 
-		'''
-		# Could you explain to me what k-bucket is? I kind of get it but not totally
-		
-		DHT = [0]
-		      [1]
-			    [2]
-					[3]
-	  It's always this large becuase N = 4. Each row in the DHT is a k-bucket 
-		i.e. each row holds at most k nodes.
-		The row's index represents that it stores nodes that are distance of 2^i to 2^i+1 away from our NodeID
-		The paper recommends storing the k-bucket where the head of the list is least recently used.
-		
-		So say distance = 2. If there are 2 nodes in [1], which row do we grab from next? 
-		We need closestNodes to be at most k (unless there is less than k entries total in the entire DHT)
-		distance is calculated by the xor of their ID's
-
-		Maybe brute force
-		"Each bucket 0≤i<N holds nodes with 2^i ≤ distance < 2^i+1" does this mean we can just "hash into" the nodes with 2^i ?
-		log the xor for the index in the DHT
-		
-		allNodes = [n for row in self.DHT for n in row]
-		allNodes.sort(key = lambda x : x ^ request.idkey)
-		'''
-
 		kClosest = self.DHT.kClosest(request.idkey)
 
 		# update the k-bucket of the requestor i.e. request.node.id
@@ -128,13 +104,13 @@ class KadImplServicer(csci4220_hw3_pb2_grpc.KadImplServicer):
 		distance closest to key requested
 		"""
 		print(f'Serving FindKey({request.idkey} request for {request.node.id}', flush=True)
-		if (request.idkey ^ self.DHT.ourNode.id) == 0:
+		if self.values.get(request.idkey) is not None:
 			# Found the key
 			return csci4220_hw3_pb2.KV_Node_Wrapper(
 				responding_node = self.DHT.ourNode,
 				mode_kv = True,
 				kv = self.value[request.idkey]
-				nodes = None
+				nodes = []
 			)
 		else:
 			# Exact same as FindNode
@@ -157,7 +133,6 @@ class KadImplServicer(csci4220_hw3_pb2_grpc.KadImplServicer):
 		print(f'Storing key {request.key} value "{request.value}"', flush=True)
 		self.DHT.values[request.key] = request.value
 		self.DHT.updateNodeLoc(request.node)
-
 
 	def Quit(self, request, context):
 		"""Notify a remote node that the node with ID in IDKey is quitting the
@@ -215,7 +190,9 @@ def run():
 			with grpc.insecure_channel(remote_addr + ':' + str(remote_port)) as channel:
 				stub = csci4220_hw3_pb2_grpc.KadImplStub(channel)
 				result = stub.FindNode(csci4220_hw3_pb2.IDKey(node = ourNode, idkey = ourNode.id))
-				remoteID = [id for node in result if node.address == remote_addr and node.port == remote_port][0]
+				# remoteID = [id for node in result if node.address == remote_addr and node.port == remote_port][0]
+				remoteID = result.responding_node.id
+				ourServicer.DHT.updateNodeLoc(result.responding_node)
 				print(f'After BOOTSTRAP({remoteID}, k_buckets now look like:')
 				ourServicer.DHT.print()
 
@@ -226,37 +203,45 @@ def run():
 			ourServicer.DHT.print()
 
 			found = nodeID == local_id
+			value = (found, ourServicer.values.get(nodeID))
 
 			if (not found):
 				# Do the search
-				Visited = {ourNode.id}
+				Visited = {}
 				nodeOfInterest = csci4220_hw3_pb2.IDKey(node = ourNode, idkey = nodeID)
 				
 				# Condition for us to use FindNode or FindValue
-				S = ourServicer.FindNode(nodeOfInterest, None).nodes if findNode else ourServicer.FindValue(nodeOfInterest, None)
+				S = ourServicer.DHT.kClosest(nodeOfInterest.idkey) # get k closest to idkey
 
 				found = nodeID in [n.id for n in S]
 				while not found and len(S) > 0:
-					notVisited = [n for n in S if s.id not in Visited]
-					S.clear()
+					S = ourServicer.DHT.kClosest(nodeOfInterest.idkey) # get k closest nodes to idkey
+					notVisited = [n for n in S if n.id not in Visited]
 					for node in notVisited:
 						with grpc.insecure_channel(node.address + ':' + str(node.port)) as channel:
 							stub = csci4220_hw3_pb2_grpc.KadImplStub(channel)
 							
 							# Condition for us to use FindNode or FindValue
-							R = stub.FindNode(nodeOfInterest)
+							R = stub.FindNode(nodeOfInterest) if findNode else stub.FindValue(nodeOfInterest)
 
-							# Always mark node as most recently used
-							Update k-buckets with node
+							# Update our k-buckets with node
+							ourServicer.DHT.updateNodeLoc(R.responding_node)
+							
+							if not findNode and R.mode_kv: # If we're for FindValue
+								found = True
+								value = (R.responding_node.id == ourNode.id, R.kv)
 							
 							# If a node in R was already in a k-bucket, its position does not change.
 							# If it was not in the bucket yet, then it is added as the most recently used in that bucket.
 							# This _may_ kick out the node from above.
-							Update k-buckets with all nodes in R
-
-							S = S + [n for n in R if n not in S] # maybe not this
-
-					If <nodeID> has been found, stop
+							for n in R.nodes:
+								if findNode and (n.id ^ nodeOfInterest.idKey) == 0:
+									found = True
+								ourServicer.DHT.updateNodeLoc(n)
+							
+							Visited.add(node)
+							if found:
+								break
 					
 			# Do the printing
 			print(f'After FIND_{'NODE' if findNode else 'VALUE'} command, k-buckets are:')
@@ -265,7 +250,10 @@ def run():
 				if findNode:
 					print(f'Found destination id {nodeID}', flush=True)
 				else:
-					print(f'Found value "{}" for key {nodeID}')
+					if value[0]:
+						print(f'Found data "{value}" for key {nodeID}')
+					else:
+						print(f'Found value "{value}" for key {nodeID}')
 			else:
 				if findNode:
 					print(f'Could not find destination id {nodeID}', flush=True)
