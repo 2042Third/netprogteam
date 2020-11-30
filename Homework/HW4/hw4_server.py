@@ -52,7 +52,7 @@ def run_server():
 
         for sock in wable:
             try:
-                next_msg = mque[sock].get_nowait()
+                next_msg = mque[sock].get_nowait() 
             except :
                 wset.remove(sock)
             else: 
