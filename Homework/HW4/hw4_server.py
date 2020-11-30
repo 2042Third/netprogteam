@@ -4,6 +4,15 @@ import sys  # For arg parsing
 import socket  # For sockets
 import select, queue
 
+def read_message(message, sensors):
+    return_message = ''
+    msg = message.split()
+    if msg[0] == 'UPDATEPOSITION':
+        sensors[msg[1]] = (int(msg[2]), int(msg[3]), int(msg[4]))
+        #NOT FINISHED
+        return_message = "REACHABLE {} {}".format(len(),''.join())
+    return return_message
+
 def run_server():
     if len(sys.argv) != 3:
         print(f"Proper usage is {sys.argv[0]} [port number] [Base Station file]")
@@ -24,13 +33,16 @@ def run_server():
     #msg queue 
     mque = {}
 
+    #Sensors
+    sensors = dict()
+
     #Base stations parsing and storing.
     #base_station's elements is a 4-tuple, containing (X,Y,Num of links, [links])
     base_stations = dict()
     with open(sys.argv[2], 'r') as file:
         for l in file:
             line = l.split()
-            base_stations[line[0]] = (line[1],line[2],line[3], [line[y] for y in range(4, len(line)-1)]) #thanks prog lang :)
+            base_stations[line[0]] = (int(line[1]),int(line[2]),int(line[3]), [line[y] for y in range(4, len(line)-1)]) #thanks prog lang :)
 
 
     # Server loop
@@ -47,9 +59,10 @@ def run_server():
             else:
                 message = sock.recv(1024)
                 if message:
-                    mque[sock].put(message)
+                    mque[sock].put(read_message(message, sensors))
 
                     print(f"Server received {len(message)} bytes: \"{message}\"")
+
                     if sock not in wset:
                         wset.append(sock)
                 else:

@@ -4,8 +4,8 @@ import sys  # For arg parsing
 import socket  # For sockets
 
 def run_client():
-    if len(sys.argv) != 3:
-        print(f"Proper usage is {sys.argv[0]} [server name/address] [server port]")
+    if len(sys.argv) != 7:
+        print(f"Proper usage is {sys.argv[0]} [control address] [control port] [SensorID] [SensorRange] [InitalXPosition] [InitialYPosition]")
         sys.exit(0)
 
     # Create the TCP socket, connect to the server
@@ -13,7 +13,10 @@ def run_client():
 
     # bind takes a 2-tuple, not 2 arguments
     # Defualt to local network
-    server_socket.connect((127.0.0.1, int(sys.argv[2])))
+    if sys.argv[1] == 'control':
+        server_socket.connect(('127.0.0.1', int(sys.argv[2])))
+    else:
+        server_socket.connect((int(sys.argv[1]), int(sys.argv[2])))
 
     while True:
         # Read a string from standard input
