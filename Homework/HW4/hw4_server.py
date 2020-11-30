@@ -21,8 +21,17 @@ def run_server():
     rset = [listening_socket]
     #write set
     wset = []
-    #msg queue (dictionary)
+    #msg queue 
     mque = {}
+
+    #Base stations parsing and storing.
+    #base_station's elements is a 4-tuple, containing (X,Y,Num of links, [links])
+    base_stations = dict()
+    with open(sys.argv[2], 'r') as file:
+        for l in file:
+            line = l.split()
+            base_stations[line[0]] = (line[1],line[2],line[3], [line[y] for y in range(4, len(line))]) #thanks prog lang :)
+
 
     # Server loop
     while rset: 
