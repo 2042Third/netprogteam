@@ -55,7 +55,7 @@ def run_server():
                 next_msg = mque[sock].get_nowait()
             except :
                 wset.remove(sock)
-            else:
+            else: 
                 print(f"Server sending {len(next_msg)} bytes: \"{next_msg}\"")
                 sock.send(next_msg)
 
