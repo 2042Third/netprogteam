@@ -48,7 +48,7 @@ def run_server():
                         wset.remove(sock)
                     rset.remove(sock)
                     sock.close()
-                    del mque[sock]
+                    del mque[sock] 
 
         for sock in wable:
             try:

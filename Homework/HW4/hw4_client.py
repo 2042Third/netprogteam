@@ -12,7 +12,8 @@ def run_client():
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     # bind takes a 2-tuple, not 2 arguments
-    server_socket.connect((sys.argv[1], int(sys.argv[2])))
+    # Defualt to local network
+    server_socket.connect((127.0.0.1, int(sys.argv[2])))
 
     while True:
         # Read a string from standard input
