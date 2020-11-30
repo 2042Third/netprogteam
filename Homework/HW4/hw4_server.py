@@ -5,8 +5,8 @@ import socket  # For sockets
 import select, queue
 
 def run_server():
-    if len(sys.argv) != 2:
-        print(f"Proper usage is {sys.argv[0]} [port number]")
+    if len(sys.argv) != 3:
+        print(f"Proper usage is {sys.argv[0]} [port number] [Base Station file]")
         sys.exit(0)
 
     # Create a TCP socket
@@ -30,7 +30,7 @@ def run_server():
     with open(sys.argv[2], 'r') as file:
         for l in file:
             line = l.split()
-            base_stations[line[0]] = (line[1],line[2],line[3], [line[y] for y in range(4, len(line))]) #thanks prog lang :)
+            base_stations[line[0]] = (line[1],line[2],line[3], [line[y] for y in range(4, len(line)-1)]) #thanks prog lang :)
 
 
     # Server loop
