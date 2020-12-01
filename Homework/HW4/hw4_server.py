@@ -3,14 +3,41 @@
 import sys  # For arg parsing
 import socket  # For sockets
 import select, queue
+import math
 
-def read_message(message, sensors):
+def dist(x1,x2,y1,y2):
+    return math.sqrt((x2-x1)**2 + (y2-y1)**2)
+
+def reachable(sen, station, cur_sen):
+    reach = []
+    senr, senx, seny = sen[cur_sen]
+    for key in sen:
+        if key == cur_sen:
+            continue
+        else:
+            r,x,y = sen[key]
+            d = dist(x,senx,y,seny)
+            if (d <= r and d <= senr):
+                reach.append('{} {} {}'.format(key, x,y))
+    for key in station:
+        x = station[key][0]
+        y = station[key][1]
+        d = dist(x,senx,y,seny)
+        if d <= senr:
+            reach.append('{} {} {}'.format(key,x,y))
+    return reach
+
+
+def read_message(message, sensors, base_stations):
     return_message = ''
     msg = message.split()
+    print(msg)
     if msg[0] == 'UPDATEPOSITION':
         sensors[msg[1]] = (int(msg[2]), int(msg[3]), int(msg[4]))
-        #NOT FINISHED
-        return_message = "REACHABLE {} {}".format(len(),''.join())
+        reach = reachable(sensors, base_stations, msg[1])
+        return_message = "REACHABLE {} {}".format(len(reach),' '.join(reach))
+    elif msg[0] == 'QUIT':
+        return_message = ''
     return return_message
 
 def run_server():
@@ -27,7 +54,7 @@ def run_server():
     listening_socket.listen(5)
     
     #read set
-    rset = [listening_socket]
+    rset = [listening_socket, sys.stdin]
     #write set
     wset = []
     #msg queue 
@@ -57,13 +84,18 @@ def run_server():
                 rset.append(client_socket)
                 mque[client_socket] = queue.Queue()
             else:
+                if sock is sys.stdin:
+                    if input() == 'QUIT':
+                        return
                 message = sock.recv(1024)
                 if message:
-                    mque[sock].put(read_message(message, sensors))
-
+                    send_msg = read_message(message.decode('utf-8'), sensors, base_stations)
+                    
+                    mque[sock].put(send_msg)
+                    print("server tries to send",read_message(message, sensors, base_stations))
                     print(f"Server received {len(message)} bytes: \"{message}\"")
 
-                    if sock not in wset:
+                    if (sock not in wset and sock is not sys.stdin):
                         wset.append(sock)
                 else:
                     if sock in wset:
@@ -79,7 +111,7 @@ def run_server():
                 wset.remove(sock)
             else: 
                 print(f"Server sending {len(next_msg)} bytes: \"{next_msg}\"")
-                sock.send(next_msg)
+                sock.send(next_msg.encode('utf-8'))
 
         for sock in excp:
             rable.remove(sock)
