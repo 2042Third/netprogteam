@@ -210,7 +210,6 @@ def run():
 			with grpc.insecure_channel(remote_addr + ':' + str(remote_port)) as channel:
 				stub = csci4220_hw3_pb2_grpc.KadImplStub(channel)
 				result = stub.FindNode(csci4220_hw3_pb2.IDKey(node = ourNode, idkey = ourNode.id))
-				# remoteID = [id for node in result if node.address == remote_addr and node.port == remote_port][0]
 				remoteID = result.responding_node.id]
 				ourServicer.DHT.updateNodeLoc(result.responding_node)
 				for node_ in result.nodes:
