@@ -10,6 +10,7 @@ def dist(x1,x2,y1,y2):
     return math.sqrt((x2-x1)**2 + (y2-y1)**2)
 
 """
+@requres reachable is a list of all in range sensors/base stations
 @param reachable is a list of (id, x, y)
 @param dest is the destination base station or sensor (id, x, y)
 @returns a list of the reachable sorted by their distance to the dest
@@ -21,7 +22,7 @@ def sortedByDist(reachable, dest):
     return [n[-1] for n in sorted(reachable, key=lambda node: (dist(node[1], destX, node[2], destY), node[0], node))]
 
 """
-@param sen is the dictionary of sensorName => (range, x, y)
+@param sen is the dictionary of sensorName => (range, x, y, sock)
 @param station is a dictionary of baseStationName => (x, y, numLinks, [links])
 @param cur_sen is the current sensor's name
 @returns a list of strings, each string having the format of "ID x y"
@@ -35,7 +36,7 @@ def reachable(sen, station, cur_sen):
         else:
             r,x,y = sen[key]
             d = dist(x,senx,y,seny)
-            if d <= senr: # If reachable to current sensor
+            if d <= senr: # If reachable to current sensor -- originally (d <= r and d <= senr)
                 reach.append('{} {} {}'.format(key, x, y))
     for key in station:
         x = station[key][0]
@@ -46,6 +47,11 @@ def reachable(sen, station, cur_sen):
     return reach
 
 
+"""
+Function processes a given message
+@param message is a string representing the message
+@param sensors i
+"""
 def read_message(message, sensors, base_stations, sock):
     return_message = ''
     msg = message.split()
@@ -96,7 +102,6 @@ def run_server():
     while rset: 
         # readable, writable, exceptional
         rable = select.select(rset, [], [])[0]
-        
         # There are messages that can be read
         for sock in rable:
             if sock is listening_socket:
@@ -111,36 +116,11 @@ def run_server():
                 message = sock.recv(1024)
                 if message:
                     send_msg = read_message(message.decode('utf-8'), sensors, base_stations, sock)
-                    #SEND MESSAGE:
-
-
-                    # mque[sock].put(send_msg)# What message gets sent
-                    # print("server tries to send",read_message(message, sensors, base_stations))
-                    # print(f"Server received {len(message)} bytes: \"{message}\"")
-
-                    # if (sock not in wset and sock is not sys.stdin):
-                    #     wset.append(sock) # Which client to send to.
+                    sock.send(send_msg.encode('utf-8'))
                 else:
                     rset.remove(sock)
                     sock.close()
                     del mque[sock] 
-# #There are messages that can be sent
-#         for sock in wable:
-#             try:
-#                 next_msg = mque[sock].get_nowait() 
-#             except :
-#                 wset.remove(sock)
-#             else: 
-#                 print(f"Server sending {len(next_msg)} bytes: \"{next_msg}\"")
-#                 sock.send(next_msg.encode('utf-8'))
-# #Exceptions
-#         for sock in excp:
-#             rable.remove(sock)
-#             if sock in wset:
-#                 wset.remove(sock)
-#             sock.close()
-#             del mque[sock]
-
 
 
 if __name__ == '__main__':

@@ -3,6 +3,8 @@
 import sys  # For arg parsing
 import socket  # For sockets
 
+
+
 def run_client():
     if len(sys.argv) != 7:
         print(f"Proper usage is {sys.argv[0]} [control address] [control port] [SensorID] [SensorRange] [InitalXPosition] [InitialYPosition]")
