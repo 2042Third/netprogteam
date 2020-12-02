@@ -26,7 +26,10 @@ def run_client():
     while True:
         # Read a string from standard input
         send_string = input("Enter a string to send: ")
-
+        if send_string.split()[0] == 'MOVE':
+            tmp = send_string.split()
+            send_string = 'UPDATEPOSITION {} {} {} {}'.format(
+                sys.argv[3], sys.argv[4], tmp[1], tmp[2])
         server_socket.sendall(send_string.encode('utf-8'))
         if not send_string:
             # Disconnect from the server
