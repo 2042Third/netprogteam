@@ -38,6 +38,9 @@ def read_message(message, sensors, base_stations):
         return_message = "REACHABLE {} {}".format(len(reach),' '.join(reach))
     elif msg[0] == 'QUIT':
         return_message = ''
+    elif msg[0] == 'WHERE':
+        return_message = 'THERE {} {} {}'.format(
+            msg[1], sensors[msg[1]][1], sensors[msg[1]][2])
     return return_message
 
 def run_server():
