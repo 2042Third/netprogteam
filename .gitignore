@@ -2,6 +2,8 @@
 *.out
 tftp
 
+*__pycache__*
+
 # Ignore the data file writtin over tftp
 data.txt
 
