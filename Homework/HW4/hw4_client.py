@@ -3,7 +3,7 @@
 import sys  # For arg parsing
 import socket  # For sockets
 
-
+reachable = dict() #reachable dictionary
 
 def run_client():
     if len(sys.argv) != 7:
@@ -24,29 +24,48 @@ def run_client():
     send_string = "UPDATEPOSITION {} {} {} {}".format(sys.argv[3], sys.argv[4],sys.argv[5],sys.argv[6])
     server_socket.send(send_string.encode('utf-8'))
     recv_string = server_socket.recv(1024)
+    print(f" {recv_string.decode('utf-8')} ")
+    
+    reach = recv_string.split()
+    for i in range(2,len(reach)/3):
+        reachable[reach[i]] = (reach[i+1], reach[i+2]) #stores the reachable sensors and base stations (x,y) 
 
     while True:
         # Read a string from standard input
         send_string = input("Enter a string to send: ")
-        if send_string.split()[0] == 'MOVE':
-            tmp = send_string.split()
-            send_string = 'UPDATEPOSITION {} {} {} {}'.format(
-                sys.argv[3], sys.argv[4], tmp[1], tmp[2])
-        server_socket.sendall(send_string.encode('utf-8'))
         if not send_string:
             # Disconnect from the server
-
             print("Closing connection to server")
             server_socket.close()
             break
+        if  send_string.split()[0] == 'MOVE':
+            tmp = send_string.split()
+            send_string = 'UPDATEPOSITION {} {} {} {}'.format(
+                sys.argv[3], sys.argv[4], tmp[1], tmp[2])
+        elif send_string.split()[0] == 'SENDDATA':
+            #send DATAMESSAGE to server
+            msg = send_string.split()
+            #get an update version of the reachable list 
+            send_string = "UPDATEPOSITION {} {} {} {}".format(sys.argv[3], sys.argv[4],sys.argv[5],sys.argv[6])
+            server_socket.send(send_string.encode('utf-8'))
+            recv_string = server_socket.recv(1024)
+            reach = recv_string.split()
+            for i in range(2,len(reach)/3):
+                reachable[reach[i]] = (reach[i+1], reach[i+2]) #stores the reachable sensors and base stations (x,y) 
+
+            return_message = ''.format(sys.argv[3], )
+            
+            
+        server_socket.sendall(send_string.encode('utf-8'))
+       
         # Get the response from the server
         recv_string = server_socket.recv(1024)
 
         
 
         # Print the response to standard output, both as byte stream and decoded text
-        print(f"Received {recv_string} from the server")
-        print(f"Decoding, received {recv_string.decode('utf-8')} from the server")
+
+        print(f" {recv_string.decode('utf-8')} ")
 
         
 

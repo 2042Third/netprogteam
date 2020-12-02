@@ -5,6 +5,15 @@ import socket  # For sockets
 import select, queue
 import math
 
+MSS = 1024
+
+#Sensors, (range, x,y, socket)
+sensors = dict()
+
+#Base stations parsing and storing.
+#base_station's elements is a 4-tuple, containing (X,Y,Num of links, [links])
+base_stations = dict()
+
 # Returns the euclidean distance given (x1, y1) and (x2, y2)
 def dist(x1,x2,y1,y2):
     return math.sqrt((x2-x1)**2 + (y2-y1)**2)
@@ -29,12 +38,12 @@ def sortedByDist(reachable, dest):
 """
 def reachable(sen, station, cur_sen):
     reach = []
-    senr, senx, seny = sen[cur_sen] # Current sensor's range, x, y
+    senr, senx, seny = sen[cur_sen][:3] # Current sensor's range, x, y
     for key in sen:
         if key == cur_sen:
             continue
         else:
-            r,x,y = sen[key]
+            r,x,y = sen[key][:3]
             d = dist(x,senx,y,seny)
             if d <= senr: # If reachable to current sensor -- originally (d <= r and d <= senr)
                 reach.append('{} {} {}'.format(key, x, y))
@@ -48,11 +57,16 @@ def reachable(sen, station, cur_sen):
 
 
 """
-Function processes a given message
+Function processes a given message (only UPDATEPOSITION and WHERE)
 @param message is a string representing the message
-@param sensors i
+@param sensors is a dict of sensorName => (range, x, y, sock)
+@param base_stations is a dictionary of baseStationName => (x, y, numLinks, [links])
+@param sock is the socket that sent the message
+@returns a string for the response message
 """
-def read_message(message, sensors, base_stations, sock):
+def read_message(message, sock):
+    global sensors
+    global base_stations
     return_message = ''
     msg = message.split()
     print(msg)
@@ -60,14 +74,17 @@ def read_message(message, sensors, base_stations, sock):
         sensors[msg[1]] = (int(msg[2]), int(msg[3]), int(msg[4]), sock )#Store the imformation of the sensor 
         reach = reachable(sensors, base_stations, msg[1])
         return_message = "REACHABLE {} {}".format(len(reach),' '.join(reach))
-    elif msg[0] == 'QUIT':
-        return_message = ''
     elif msg[0] == 'WHERE':
-        return_message = 'THERE {} {} {}'.format(
-            msg[1], sensors[msg[1]][1], sensors[msg[1]][2])
+        if msg[1] in base_stations.keys(): # Base station location
+            return_message = 'THERE {} {} {}'.format(msg[1], base_stations[msg[1]][1], base_stations[msg[1]][2])
+        else: # It's asking for a sensor location
+            return_message = 'THERE {} {} {}'.format(msg[1], sensors[msg[1]][1], sensors[msg[1]][2])
+            
     return return_message
 
 def run_server():
+    global sensors
+    global base_stations
     if len(sys.argv) != 3:
         print(f"Proper usage is {sys.argv[0]} [port number] [Base Station file]")
         sys.exit(0)
@@ -86,12 +103,6 @@ def run_server():
     #msg queue 
     mque = {}
 
-    #Sensors, (range, x,y, socket)
-    sensors = dict()
-
-    #Base stations parsing and storing.
-    #base_station's elements is a 4-tuple, containing (X,Y,Num of links, [links])
-    base_stations = dict()
     with open(sys.argv[2], 'r') as file:
         for l in file:
             line = l.split()
@@ -104,23 +115,49 @@ def run_server():
         rable = select.select(rset, [], [])[0]
         # There are messages that can be read
         for sock in rable:
-            if sock is listening_socket:
+            if sock is listening_socket: # Adding a new sensor
                 (client_socket, address) = sock.accept()
-                client_socket.setblocking(0)
                 rset.append(client_socket)
-                mque[client_socket] = queue.Queue()
             else:
                 if sock is sys.stdin:
-                    if input() == 'QUIT':
+                    cmd = input()
+                    if cmd == 'QUIT':
+                        for s in rset:
+                            s.close()
+                        listening_socket.close()
                         return
-                message = sock.recv(1024)
-                if message:
-                    send_msg = read_message(message.decode('utf-8'), sensors, base_stations, sock)
-                    sock.send(send_msg.encode('utf-8'))
-                else:
-                    rset.remove(sock)
-                    sock.close()
-                    del mque[sock] 
+                    else: # SENDDATA
+                        pass
+                else: # Receive message from sensor
+                    message = sock.recv(MSS)
+                    if message != '':
+                        if message[0] != 'DATAMESSAGE':
+                            send_msg = read_message(message.decode('utf-8'), sock)
+                            sock.send(send_msg.encode('utf-8'))
+                        else: # DATAMESSAGE
+                            originID, nextID, dest, hoplen = message[1:5]
+                            hoplist = message[5:]
+                            if nextID in sensors.keys(): # Sensor -> Controller -> Sensor
+                                sensorSock = sensors[nextID][-1]
+                                sensorSock.send(message.encode('utf-8'))
+                            else: # Sensor -> Controller -> Base Station chain -> Sensor
+                                baseID = nextID # Pretend we are baseID
+                                if 
+                                while nextId not in sensors:
+                                # We know it's Sensor -> Controller -> Base Station chain
+                                # - If destinationid === baseid, print destination reached
+                                # - else
+                                #     - if all reachable sensors and base stations hit, say can't deliver
+                                #     - else
+                                #     - Send Datamessage to next hop
+                                #         - print if you forwarded it, sent it to the destination, or are just starting the delivery (originID === baseID)
+                                if dest
+
+                            
+
+                    else: # client connection closed for some reason, which should not be possible given the systme model
+                        rset.remove(sock)
+                        sock.close()
 
 
 if __name__ == '__main__':
