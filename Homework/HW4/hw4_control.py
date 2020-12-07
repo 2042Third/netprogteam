@@ -165,7 +165,7 @@ def processDataMessage(message):
                             if x[0] in sensors.keys():
                                 _,senx,seny = x
                                 bx,by,_,_ = base_stations[baseID]
-                                
+
                                 if not sensors[x[0]][0] >= dist(senx,bx,seny,by):
                                     continue
                                 else:
@@ -245,7 +245,7 @@ def run_server():
                                 processDataMessage(["DATAMESSAGE", originID, nextID, destID, None, []])
                             else: # It's a base station so just jet it to them
                                 print(f"{originID}: Sent a new message directly to {destID}")
-                                print(f"{destID}: Message from {originID} to {destID} succesfully recieved.")
+                                print(f"{destID}: Message from {originID} to {destID} successfully recieved.")
                         else: # originID is a base station, next hop should be based on what is reachable from origin base station
                             reachableNotVisited = reachableForBaseStation(originID, []) # (Id, x, y) of nodes (base/sensor) reachable from originID
                             nextID = ''
