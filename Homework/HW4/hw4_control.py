@@ -88,7 +88,7 @@ def read_message(message, sock):
     elif msg[0] == 'WHERE':
         if msg[1] in base_stations.keys():  # Base station location
             return_message = 'THERE {} {} {}'.format(
-                msg[1], base_stations[msg[1]][1], base_stations[msg[1]][2])
+                msg[1], base_stations[msg[1]][0], base_stations[msg[1]][1])
         else:  # It's asking for a sensor location
             return_message = 'THERE {} {} {}'.format(msg[1], sensors[msg[1]][1], sensors[msg[1]][2])
 
@@ -135,7 +135,7 @@ def processDataMessage(message):
             
             if destID == baseID: # It arrived
                 print(
-                    f'{baseID}: Message from {originID} to {destID} successfully received.', flush=True)
+                    f'{baseID}: Message from {originID} to {destID} succesfully received.', flush=True)
                 sendMsg = False
                 break
             else:
@@ -155,7 +155,7 @@ def processDataMessage(message):
                     elif originID == baseID:
                         print(f"{baseID}: Sent a new message bound for {destID}", flush=True)
                     else:
-                        print(f"{baseID}: Message from {originID} to {destID} being forwarded through {nextID}", flush=True)
+                        print(f"{baseID}: Message from {originID} to {destID} being forwarded through {baseID}", flush=True)
                     
         if sendMsg: # Send to the sensor
             sensorSock = sensors[nextID][-1]
@@ -226,6 +226,7 @@ def run_server():
                             
                 else:  # Receive message from sensor
                     message = sock.recv(MSS).decode("utf-8")
+                    # print(message)
                     if message != '':
                         if message.split()[0] != 'DATAMESSAGE':
                             send_msg = read_message(message, sock)

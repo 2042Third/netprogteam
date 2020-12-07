@@ -54,6 +54,7 @@ def WHERE(currID):
     server_socket.send(send_string.encode('utf-8'))
     recv_string = server_socket.recv(1024)
     data = recv_string.decode('utf-8').split()
+    # print(data)
     return (data[1], int(data[2]), int (data[3]))
 
 def run_client():
@@ -111,9 +112,11 @@ def run_client():
                     send_string = print('{}: Message from {} to {} could not be delivered.'.format(cliNAME, cliNAME, cmd[1]))
                 else:
                     destID, destX, destY = WHERE(cmd[1]) 
+                    # print('{} {} {}'.format(destID,destX,destY))
                     reach_sort = [(dist(reachable[key][0], destX , reachable[key][1], destY), key) for key in reachable]
                     reach_sort = sorted(reach_sort)
                     nextID = reach_sort[0][1]
+                    # print(reach_sort)
                     send_string = 'DATAMESSAGE {} {} {} {} {}'.format(cliNAME, nextID, destID, 1, ' '.join([cliNAME]))
                     server_socket.sendall(send_string.encode('utf-8'))
 
@@ -126,6 +129,7 @@ def run_client():
         if server_socket in rlist:
             # We got DATAMESSAGE
             msg = server_socket.recv(1024).decode("utf-8").split()
+            # print(msg)
             originID, nextID, destID = msg[1:4]
             if destID == cliNAME:
                 print("{}: Message from {} to {} succesfully received.".format(cliNAME, originID, destID))
@@ -134,10 +138,14 @@ def run_client():
                 destID, destX, destY = WHERE(destID)
                 reach_sort = [(dist(reachable[key][0], xPOS, reachable[key][1], yPOS), key) for key in reachable if key not in msg[5:]]
                 reach_sort = sorted(reach_sort)
+                # print(reach_sort)
                 if len(reach_sort) == 0:
                     print('{}: Message from {} to {} could not be delivered.'.format(cliNAME, originID, destID))
                 else:
-                    print('{}: Message from {} to {} being forwarded through {}.'.format(cliNAME, originID, destID, cliNAME))
+                    for i in reach_sort:
+                        if i[1] == destID:
+                            reach_sort[0] = i
+                    print('{}: Message from {} to {} being forwarded through {}'.format(cliNAME, originID, destID, cliNAME))
                     hop = msg[5:]
                     hop.append(reach_sort[0][1])
                     send_string = 'DATAMESSAGE {} {} {} {} {}'.format(
