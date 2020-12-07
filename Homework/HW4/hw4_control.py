@@ -107,8 +107,6 @@ def reachableForBaseStation(baseID, hoplist):
     reach = reach + [(sen, data[1], data[2]) for sen, data in sensors.items()] # all sensors
     reachableNotVisited = list(set([node[0] for node in reach]) - set(hoplist))
     result = []
-    # print(reachableNotVisited)
-    # print(reach)
     for id in reachableNotVisited:
         for node in reach:
             if node[0] == id:
@@ -134,7 +132,7 @@ def processDataMessage(message):
                             for x in base_stations.keys()
                             if dist(destX,base_stations[x][0],destY, base_stations[x][1]) <= sensors[originID][0]]
             sortWhole = sorted(sortWhole)
-            # print(f"{sortWhole[0][1]}: Message from {originID} to {destID} being forwarded through {sortWhole[0][1]}", flush=True)
+            print(f"{sortWhole[0][1]}: Message from {originID} to {destID} being forwarded through {sortWhole[0][1]}", flush=True)
         sensorSock.send(message.encode('utf-8'))
     else:  # Sensor -> Controller -> Base Station chain -> Sensor
         sendMsg = True # bool of whether we should send DATAMESSAGE to sensor after the chain
@@ -143,7 +141,7 @@ def processDataMessage(message):
             
             if destID == baseID: # It arrived
                 print(
-                    f'{baseID}: Message from {originID} to {destID} succesfully received.', flush=True)
+                    f'{baseID}: Message from {originID} to {destID} successfully received.', flush=True)
                 sendMsg = False
                 break
             else:
@@ -158,14 +156,11 @@ def processDataMessage(message):
                     nextList = sortedByDist(reachableNotVisited, destObj)
                      # Sorted by dist of all reachable to the destination node
                     filtered = []
-                    # print(nextList)
-                    # print(filtered)
                     if destID in sensors.keys():
                         for x in nextList:
                             if x[0] in sensors.keys():
                                 _,senx,seny = x
                                 bx,by,_,_ = base_stations[baseID]
-
                                 if not sensors[x[0]][0] >= dist(senx,bx,seny,by):
                                     continue
                                 else:
@@ -174,8 +169,8 @@ def processDataMessage(message):
                                 filtered.append(x)
                     else:
                         filtered = nextList
-                    
                     if (len(filtered) == 0):
+                        print(f"{baseID}: Message from {originID} to {destID} being forwarded through {baseID}", flush=True)
                         print(f"{baseID}: Message from {originID} to {destID} could not be delivered.", flush=True)
                         sendMsg = False
                         break
@@ -257,7 +252,6 @@ def run_server():
                             
                 else:  # Receive message from sensor
                     message = sock.recv(MSS).decode("utf-8")
-                    # print(message)
                     if message != '':
                         if message.split()[0] != 'DATAMESSAGE':
                             send_msg = read_message(message, sock)
