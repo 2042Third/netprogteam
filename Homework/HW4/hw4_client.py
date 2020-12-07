@@ -132,7 +132,7 @@ def run_client():
             # print(msg)
             originID, nextID, destID = msg[1:4]
             if destID == cliNAME:
-                print("{}: Message from {} to {} succesfully received.".format(cliNAME, originID, destID))
+                print("{}: Message from {} to {} successfully received.".format(cliNAME, originID, destID))
             else:
                 reachable = UPDATEPOSITION(xPOS, yPOS)
                 destID, destX, destY = WHERE(destID)

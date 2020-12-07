@@ -107,6 +107,8 @@ def reachableForBaseStation(baseID, hoplist):
     reach = reach + [(sen, data[1], data[2]) for sen, data in sensors.items()] # all sensors
     reachableNotVisited = list(set([node[0] for node in reach]) - set(hoplist))
     result = []
+    # print(reachableNotVisited)
+    # print(reach)
     for id in reachableNotVisited:
         for node in reach:
             if node[0] == id:
@@ -124,9 +126,15 @@ def processDataMessage(message):
     
     originID, nextID, destID = message.split()[1:4]
     hoplist = message.split()[5:]
-    #print(f'destID: {destID}, nextID: {nextID}', flush=True)
     if nextID in sensors.keys():  # Sensor -> Controller -> Sensor
         sensorSock = sensors[nextID][-1]
+        if nextID == destID:
+            _, destX , destY, _ = sensors[destID] 
+            sortWhole = [(dist(sensors[originID][1],base_stations[x][0],sensors[originID][2], base_stations[x][1]), x) 
+                            for x in base_stations.keys()
+                            if dist(destX,base_stations[x][0],destY, base_stations[x][1]) <= sensors[originID][0]]
+            sortWhole = sorted(sortWhole)
+            # print(f"{sortWhole[0][1]}: Message from {originID} to {destID} being forwarded through {sortWhole[0][1]}", flush=True)
         sensorSock.send(message.encode('utf-8'))
     else:  # Sensor -> Controller -> Base Station chain -> Sensor
         sendMsg = True # bool of whether we should send DATAMESSAGE to sensor after the chain
@@ -146,9 +154,32 @@ def processDataMessage(message):
                     sendMsg = False
                     break
                 else: # "Send" Datamessage to next base station
-                    destObj = (sensors[destID][1], sensors[destID][2]) if destID in sensors.keys() else (base_stations[destID][0], base_stations[destID][1])
-                    nextID = sortedByDist(reachableNotVisited, destObj)[0][0] # Sorted by dist of all reachable to the destination node
+                    destObj = (sensors[destID][1], sensors[destID][2]) if (destID in sensors.keys() ) else (base_stations[destID][0], base_stations[destID][1])
+                    nextList = sortedByDist(reachableNotVisited, destObj)
+                     # Sorted by dist of all reachable to the destination node
+                    filtered = []
+                    # print(nextList)
+                    # print(filtered)
+                    if destID in sensors.keys():
+                        for x in nextList:
+                            if x[0] in sensors.keys():
+                                _,senx,seny = x
+                                bx,by,_,_ = base_stations[baseID]
+                                
+                                if not sensors[x[0]][0] >= dist(senx,bx,seny,by):
+                                    continue
+                                else:
+                                    filtered.append(x)
+                            else:
+                                filtered.append(x)
+                    else:
+                        filtered = nextList
                     
+                    if (len(filtered) == 0):
+                        print(f"{baseID}: Message from {originID} to {destID} could not be delivered.", flush=True)
+                        sendMsg = False
+                        break
+                    nextID = filtered[0][0]
                     hoplist.append(baseID)
                     if originID == baseID and nextID == destID:
                         print(f"{baseID}: Sent a new message directly to {destID}", flush=True)
@@ -214,7 +245,7 @@ def run_server():
                                 processDataMessage(["DATAMESSAGE", originID, nextID, destID, None, []])
                             else: # It's a base station so just jet it to them
                                 print(f"{originID}: Sent a new message directly to {destID}")
-                                print(f"{destID}: Message from {originID} to {destID} successfully recieved.")
+                                print(f"{destID}: Message from {originID} to {destID} succesfully recieved.")
                         else: # originID is a base station, next hop should be based on what is reachable from origin base station
                             reachableNotVisited = reachableForBaseStation(originID, []) # (Id, x, y) of nodes (base/sensor) reachable from originID
                             nextID = ''
